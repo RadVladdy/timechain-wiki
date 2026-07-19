@@ -1,6 +1,6 @@
 ---
 import Base from "../layouts/Base.astro";
-import { SECTIONS } from "../lib/sections.js";
+import { GROUPS } from "../lib/sections.js";
 import { getCollection } from "astro:content";
 
 const all = await getCollection("wiki");
@@ -17,7 +17,7 @@ function count(area) {
   <header class="hero"><div class="wrap">
     <div class="kicker"><span class="eyebrow">The Bitcoin encyclopedia</span><span class="rule"></span><span class="eyebrow">{all.length} entries</span></div>
     <h1>A structured reference for Bitcoin —<br />walk the <em>argument</em>, don't just search it.</h1>
-    <p class="lede">Timechain Wiki renders a painstakingly organized knowledge base as a public encyclopedia. Every entry sits inside a deliberate structure — <strong>16 sections, mapped and cross-linked</strong> — so you can follow the reasoning, not just look up a term.</p>
+    <p class="lede">Timechain Wiki renders a painstakingly organized knowledge base as a public encyclopedia. Every entry sits inside a deliberate hierarchy — <strong>seven movements, sixteen sections, all cross-linked</strong> — so you can follow the reasoning, not just look up a term.</p>
 
     <div class="searchbar">
       <svg width="17" height="17" viewBox="0 0 24 24" fill="none" style="color:var(--brass)"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><path d="M16.5 16.5 21 21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
@@ -34,25 +34,37 @@ function count(area) {
   </div></header>
 
   <section class="sec"><div class="wrap">
-    <div class="sec-h"><span class="tag">The map · §1–§16</span><h2>The structure is the content</h2><p>Sixteen sections in deliberate order. Each opens its section map — the curated front door to that part of the knowledge base.</p></div>
+    <div class="sec-h"><span class="tag">The map · from foundations to the discourse</span><h2>The structure is the content</h2><p>The knowledge base's own hierarchy — seven movements, each opening onto its sections, each of those onto its clusters and entries.</p></div>
 
-    <div class="map">
-      {SECTIONS.map((s) => {
-        const c = count(s.area);
-        return (
-          <a class="node" href={`/wiki/${s.slug}`}>
-            <div class="num">{s.num}</div>
+    <div class="groups">
+      {GROUPS.map((g) => (
+        <div class="group">
+          <div class="group-h">
+            <span class="roman">{g.roman}</span>
             <div>
-              <div class="title">{s.title}</div>
-              <div class="scope">{s.scope}</div>
+              <h3 class="glabel">{g.label}</h3>
+              <p class="gblurb">{g.blurb}</p>
             </div>
-            <div class="meta">
-              <span class="count">{c == null ? "cross-cutting" : `${c} notes`}</span>
-              <span class="arw">→</span>
-            </div>
-          </a>
-        );
-      })}
+          </div>
+          <div class="gmap">
+            {g.sections.map((s) => {
+              const c = count(s.area);
+              return (
+                <a class="node" href={`/wiki/${s.slug}`}>
+                  <div>
+                    <div class="title">{s.title}</div>
+                    <div class="scope">{s.scope}</div>
+                  </div>
+                  <div class="meta">
+                    <span class="count">{c == null ? "cross-cutting" : `${c} notes`}</span>
+                    <span class="arw">→</span>
+                  </div>
+                </a>
+              );
+            })}
+          </div>
+        </div>
+      ))}
     </div>
   </div></section>
 </Base>
