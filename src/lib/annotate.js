@@ -315,13 +315,23 @@ export async function init() {
 
   fab.addEventListener("click", () => (panel.hidden ? openPanel() : closePanel()));
   panel.querySelector(".tw-x").addEventListener("click", closePanel);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !panel.hidden) closePanel(); });
 
-  // Selection → popover.
-  const onSelect = () => { const r = currentSelection(); if (r) showPop(r.getBoundingClientRect()); else hidePop(); };
-  document.addEventListener("mouseup", () => setTimeout(onSelect, 0));
-  document.addEventListener("touchend", () => setTimeout(onSelect, 0));
-  document.addEventListener("selectionchange", () => { if (!currentSelection()) hidePop(); });
-  pop.querySelector(".tw-hlbtn").addEventListener("mousedown", (e) => { e.preventDefault(); const r = currentSelection(); if (r) makeHighlight(r); });
+  // Selection → popover. `selectionchange` (debounced) is the mobile-safe trigger:
+  // unlike touchend it does NOT fire while scrolling, so the popover never chases
+  // the reader down the page. mouseup keeps desktop feeling instant.
+  const showForSelection = debounce(() => { const r = currentSelection(); if (r) showPop(r.getBoundingClientRect()); else hidePop(); }, 60);
+  document.addEventListener("selectionchange", showForSelection);
+  document.addEventListener("mouseup", showForSelection);
+
+  // Dismiss on scroll or any outside tap — the fix for mobile, where a lingering
+  // selection would otherwise leave the fixed popover hanging over the page.
+  addEventListener("scroll", hidePop, { passive: true, capture: true });
+  document.addEventListener("pointerdown", (e) => { if (!pop.hidden && !pop.contains(e.target)) hidePop(); }, true);
+
+  // pointerdown (not mousedown) so the button works under touch; preventDefault
+  // keeps the selection alive long enough to read it.
+  pop.querySelector(".tw-hlbtn").addEventListener("pointerdown", (e) => { e.preventDefault(); const r = currentSelection(); if (r) makeHighlight(r); });
 
   // Click an existing highlight → open it.
   root.addEventListener("click", (e) => {

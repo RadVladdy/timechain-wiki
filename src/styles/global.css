@@ -215,8 +215,8 @@ a.entry:hover .e-arw{transform:translateX(3px);color:var(--brass)}
 .tw-p-head{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid var(--line)}
 .tw-p-head b{font-family:var(--serif);font-size:18px;font-weight:600}
 .tw-count{font-family:var(--mono);font-size:12px;color:var(--ink-faint);margin-left:9px}
-.tw-x{background:none;border:0;color:var(--ink-soft);font-size:16px;cursor:pointer;padding:4px}
-.tw-x:hover{color:var(--ink)}
+.tw-x{background:none;border:0;color:var(--ink-soft);font-size:18px;cursor:pointer;padding:6px;min-width:40px;min-height:40px;border-radius:8px;line-height:1}
+.tw-x:hover,.tw-x:active{color:var(--ink);background:var(--surface)}
 .tw-auth{padding:13px 18px;border-bottom:1px solid var(--line-soft);display:flex;flex-direction:column;gap:9px}
 .tw-signed{font-size:13px;color:var(--ink-soft);display:flex;align-items:center;gap:8px}
 .tw-signed b{color:var(--ink);font-family:var(--mono);font-size:12px}
