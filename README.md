@@ -10,8 +10,18 @@ step. Cloudflare Pages serves the root directly.
 
 ## Deploy
 
-Push to `main` → Cloudflare Pages auto-deploys (Git integration). No build
-command; output directory = repo root.
+**Manual, via Wrangler direct-upload — there is NO git integration** (the Pages
+project shows `Git Provider: No`; a plain `git push` does NOT deploy). Deploy from
+a directory containing just `index.html`:
+
+```
+CLOUDFLARE_API_TOKEN=$(cat ~/secure/cloudflare-pages-token) \
+  npx wrangler pages deploy . --project-name=timechain-wiki --branch=main
+```
+
+`main` is the production branch, so this updates the live custom domain. Note the
+`timechain.wiki` apex can lag the `timechain-wiki.pages.dev` alias by ~1 minute
+after a fresh production deploy. No build step; output = the static files.
 
 ## Local preview
 
