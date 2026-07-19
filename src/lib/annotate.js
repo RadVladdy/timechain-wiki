@@ -68,6 +68,8 @@ function currentSelection() {
   return range;
 }
 
+const coarsePointer = () => matchMedia("(pointer:coarse)").matches;
+
 async function makeHighlight(range) {
   const anchor = describe(root, range);
   if (!anchor) return;
@@ -76,10 +78,17 @@ async function makeHighlight(range) {
   list = store.all();
   getSelection().removeAllRanges();
   hidePop();
-  openPanel();
-  setActive(hl.id);
-  // Focus the new note field.
-  requestAnimationFrame(() => { const ta = $(`.tw-item[data-id="${hl.id}"] textarea`); ta && ta.focus(); });
+  paint();
+  updateFab();
+  // On touch, don't shove the full panel over the page — confirm with a toast and
+  // let the reader open it deliberately. On desktop, open it to add a note inline.
+  if (coarsePointer()) {
+    toast("Highlighted ✓ — tap the highlights button to add a note.");
+  } else {
+    openPanel();
+    setActive(hl.id);
+    requestAnimationFrame(() => { const ta = $(`.tw-item[data-id="${hl.id}"] textarea`); ta && ta.focus(); });
+  }
   if (user && (await nlib()).hasSigner()) publishOne(hl.id);
 }
 
@@ -102,8 +111,9 @@ fab.setAttribute("aria-label", "Your highlights");
 fab.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M4 20h16M6 16l9-9a2 2 0 0 1 3 0a2 2 0 0 1 0 3l-9 9H6v-3Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg><span class="tw-fab-n">0</span>`;
 document.body.appendChild(fab);
 
+let lastClose = 0;
 function openPanel() { panel.hidden = false; renderPanel(); }
-function closePanel() { panel.hidden = true; activeId = null; paint(); }
+function closePanel() { panel.hidden = true; activeId = null; lastClose = Date.now(); paint(); }
 function updateFab() {
   const n = list.length;
   fab.querySelector(".tw-fab-n").textContent = n;
@@ -314,7 +324,7 @@ export async function init() {
   updateFab();
 
   fab.addEventListener("click", () => (panel.hidden ? openPanel() : closePanel()));
-  panel.querySelector(".tw-x").addEventListener("click", closePanel);
+  panel.querySelector(".tw-x").addEventListener("click", (e) => { e.stopPropagation(); closePanel(); });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !panel.hidden) closePanel(); });
 
   // Selection → popover. `selectionchange` (debounced) is the mobile-safe trigger:
@@ -333,9 +343,11 @@ export async function init() {
   // keeps the selection alive long enough to read it.
   pop.querySelector(".tw-hlbtn").addEventListener("pointerdown", (e) => { e.preventDefault(); const r = currentSelection(); if (r) makeHighlight(r); });
 
-  // Click an existing highlight → open it.
+  // Click an existing highlight → open it. Skip briefly after a close so the tap
+  // that dismissed the panel can't immediately reopen it on touch.
   root.addEventListener("click", (e) => {
     if (currentSelection()) return; // a fresh selection, not a click-through
+    if (Date.now() - lastClose < 400) return;
     const h = hitTest(root, list, e.clientX, e.clientY);
     if (h) { openPanel(); scrollTo(h.id); }
   });

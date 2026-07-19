@@ -211,6 +211,9 @@ a.entry:hover .e-arw{transform:translateX(3px);color:var(--brass)}
 .tw-fab-n{font-family:var(--mono);font-size:12px;color:var(--brass);font-weight:600}
 
 .tw-panel{position:fixed;top:0;right:0;bottom:0;z-index:85;width:min(390px,92vw);background:var(--surface);border-left:1px solid var(--line);box-shadow:var(--shadow);display:flex;flex-direction:column;animation:slidein .2s ease}
+/* `display:flex/inline-flex/none` above override the UA [hidden] rule, so hidden
+   would never actually hide these — restore it at higher specificity. */
+.tw-panel[hidden],.tw-fab[hidden],.tw-authmenu[hidden]{display:none}
 @keyframes slidein{from{transform:translateX(100%)}to{transform:none}}
 .tw-p-head{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid var(--line)}
 .tw-p-head b{font-family:var(--serif);font-size:18px;font-weight:600}
