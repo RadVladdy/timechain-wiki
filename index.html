@@ -124,6 +124,25 @@
     }
 
     footer .brand { color: var(--text); }
+
+    .sisters {
+      margin-top: 0.7rem;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      align-items: center;
+      gap: 0.35rem 0.9rem;
+    }
+
+    .sisters .label {
+      font-size: 0.72rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .sisters a { color: var(--muted); text-decoration: none; }
+    .sisters a:hover { color: var(--accent); }
   </style>
 </head>
 <body>
@@ -143,6 +162,11 @@
   </main>
   <footer>
     <span class="brand">A RadVladdy project</span>
+    <nav class="sisters" aria-label="Sister projects">
+      <span class="label">Sister projects</span>
+      <a href="https://bitcoinkeys.guide">bitcoinkeys.guide</a>
+      <a href="https://bitcoineconomy.ai">bitcoineconomy.ai</a>
+    </nav>
   </footer>
 </body>
 </html>
