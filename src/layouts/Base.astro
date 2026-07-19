@@ -26,6 +26,10 @@ const full = title === "Timechain Wiki" ? title : `${title} — Timechain Wiki`;
         <span class="t">Timechain</span><span class="w">Wiki</span>
       </a>
       <div class="spacer"></div>
+      <button class="chip srch" type="button" id="open-search" aria-label="Search the wiki">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><path d="M16.5 16.5 21 21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <span class="srch-t">Search</span><span class="kbd">⌘K</span>
+      </button>
       <button class="chip" type="button" id="signin"><span class="dot"></span>Sign in · Nostr / Pubky</button>
       <button class="iconbtn" type="button" id="theme" aria-label="Toggle light/dark">◐</button>
     </div></div></div>
@@ -41,6 +45,90 @@ const full = title === "Timechain Wiki" ? title : `${title} — Timechain Wiki`;
         <span class="mono">rendered from source · CC-BY where the source allows</span>
       </div>
     </div></footer>
+
+    <div class="modal" id="search-modal" hidden>
+      <div class="modal-bg" data-close></div>
+      <div class="modal-panel" role="dialog" aria-modal="true" aria-label="Search the wiki">
+        <div class="search-in">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style="color:var(--brass)"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><path d="M16.5 16.5 21 21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          <input id="search-input" type="search" placeholder="Search the encyclopedia…" autocomplete="off" spellcheck="false" />
+          <span class="kbd" data-close>esc</span>
+        </div>
+        <div class="search-results" id="search-results">
+          <p class="search-hint">Search titles and full text across every entry.</p>
+        </div>
+      </div>
+    </div>
+
+    <script is:inline>
+      // ── ⌘K search (Pagefind) — the index lives in the built site only ──
+      (() => {
+        const modal = document.getElementById("search-modal");
+        const input = document.getElementById("search-input");
+        const out = document.getElementById("search-results");
+        let pf = null, loaded = false, sel = -1, rows = [];
+
+        async function ensure() {
+          if (loaded) return pf;
+          loaded = true;
+          try {
+            pf = await import("/pagefind/pagefind.js");
+            await pf.init();
+          } catch (e) { pf = null; }
+          return pf;
+        }
+        function open() {
+          modal.hidden = false;
+          document.body.style.overflow = "hidden";
+          requestAnimationFrame(() => input.focus());
+          ensure();
+        }
+        function close() {
+          modal.hidden = true;
+          document.body.style.overflow = "";
+          input.value = ""; sel = -1; rows = [];
+          out.innerHTML = '<p class="search-hint">Search titles and full text across every entry.</p>';
+        }
+        function highlight() {
+          rows.forEach((r, i) => r.classList.toggle("on", i === sel));
+          if (sel >= 0) rows[sel].scrollIntoView({ block: "nearest" });
+        }
+        async function run(q) {
+          if (!q.trim()) {
+            out.innerHTML = '<p class="search-hint">Search titles and full text across every entry.</p>';
+            rows = []; sel = -1; return;
+          }
+          const lib = await ensure();
+          if (!lib) { out.innerHTML = '<p class="search-hint">Search runs on the published site — run a full build to index.</p>'; return; }
+          const s = await lib.debouncedSearch(q);
+          if (!s) return; // superseded by a newer keystroke
+          if (!s.results.length) {
+            out.innerHTML = '<p class="search-hint">No matches for “' + q.replace(/</g, "&lt;") + '”.</p>';
+            rows = []; sel = -1; return;
+          }
+          const data = await Promise.all(s.results.slice(0, 8).map((r) => r.data()));
+          out.innerHTML = data.map((d) =>
+            '<a class="sr" href="' + d.url + '"><span class="sr-t">' +
+            (d.meta.title || d.url) + '</span><span class="sr-x">' + d.excerpt + "</span></a>"
+          ).join("");
+          rows = Array.from(out.querySelectorAll(".sr")); sel = -1;
+        }
+
+        document.getElementById("open-search")?.addEventListener("click", open);
+        document.querySelectorAll(".searchbar, #hero-search").forEach((el) =>
+          el.addEventListener("click", open));
+        modal.querySelectorAll("[data-close]").forEach((el) => el.addEventListener("click", close));
+        input?.addEventListener("input", (e) => run(e.target.value));
+        document.addEventListener("keydown", (e) => {
+          if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); modal.hidden ? open() : close(); return; }
+          if (modal.hidden) { if (e.key === "/" && !/^(INPUT|TEXTAREA)$/.test(document.activeElement?.tagName)) { e.preventDefault(); open(); } return; }
+          if (e.key === "Escape") close();
+          else if (e.key === "ArrowDown") { e.preventDefault(); sel = Math.min(sel + 1, rows.length - 1); highlight(); }
+          else if (e.key === "ArrowUp") { e.preventDefault(); sel = Math.max(sel - 1, 0); highlight(); }
+          else if (e.key === "Enter" && sel >= 0) { e.preventDefault(); rows[sel].click(); }
+        });
+      })();
+    </script>
 
     <script is:inline>
       const root = document.documentElement;

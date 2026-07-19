@@ -1,7 +1,9 @@
 ---
 import Base from "../../layouts/Base.astro";
-import { SECTIONS } from "../../lib/sections.js";
+import SectionView from "../../components/SectionView.astro";
+import { SECTIONS, findSection } from "../../lib/sections.js";
 import titles from "../../lib/wiki-index.json";
+import sectionsData from "../../lib/sections-data.json";
 import { getCollection, render } from "astro:content";
 
 export async function getStaticPaths() {
@@ -10,25 +12,58 @@ export async function getStaticPaths() {
 }
 
 const { entry } = Astro.props;
-const { Content } = await render(entry);
 const d = entry.data;
 const title = titles[entry.id] ?? entry.id;
+
+// A sub-MOC renders as the structured section walk-down (clusters → entries),
+// not as raw prose. Everything else renders as an article.
+const found = findSection(entry.id);
+const secData = sectionsData[entry.id];
+const isSection = d.type === "sub-MOC" && found && secData;
+
+let thinkers = [], sources = [], Content = null;
+if (isSection) {
+  const all = await getCollection("wiki");
+  const area = found.section.area;
+  const nameOf = (e) => titles[e.id] ?? e.id;
+  if (area) {
+    thinkers = all.filter((e) => e.data.type === "thinker" && e.data.area === area)
+      .map((e) => ({ slug: e.id, title: nameOf(e) })).sort((a, b) => a.title.localeCompare(b.title));
+    sources = all.filter((e) => e.data.type === "source" && e.data.area === area)
+      .map((e) => ({ slug: e.id, title: nameOf(e) })).sort((a, b) => a.title.localeCompare(b.title));
+  }
+} else {
+  Content = (await render(entry)).Content;
+}
+
 const section = SECTIONS.find((s) => s.area && s.area === d.area);
 const tags = Array.isArray(d.tags) ? d.tags : d.tags ? [d.tags] : [];
 const meta = [d.type, d.area, d.level].filter(Boolean);
 ---
 <Base title={title} description={`${title} — from the Bitcoin knowledge base.`}>
-  <article class="article"><div class="wrap">
-    <nav class="crumbs">
-      <a href="/">Home</a> <b>›</b>
-      {section && (<><a href={`/wiki/${section.slug}`}>{section.title}</a> <b>›</b> </>)}
-      {title}
-    </nav>
-    <h1 class="dt">{title}</h1>
-    {meta.length > 0 && <div class="dmeta">{meta.map((m) => <span>{m}</span>)}</div>}
-    {tags.length > 0 && <div class="tagrow">{tags.map((t) => <span>#{t}</span>)}</div>}
-    <div class="prose">
-      <Content />
-    </div>
-  </div></article>
+  {isSection ? (
+    <SectionView
+      title={title}
+      group={found.group}
+      scope={found.section.scope}
+      summary={secData.summary}
+      clusters={secData.clusters}
+      thinkers={thinkers}
+      sources={sources}
+    />
+  ) : (
+    <article class="article" data-pagefind-body><div class="wrap">
+      <nav class="crumbs">
+        <a href="/">Home</a> <b>›</b>
+        {section && (<><a href={`/wiki/${section.slug}`}>{section.title}</a> <b>›</b> </>)}
+        {title}
+      </nav>
+      <h1 class="dt" data-pagefind-meta="title">{title}</h1>
+      {meta.length > 0 && <div class="dmeta" data-pagefind-ignore>{meta.map((m) => <span>{m}</span>)}</div>}
+      {tags.length > 0 && <div class="tagrow" data-pagefind-ignore>{tags.map((t) => <span>#{t}</span>)}</div>}
+      <div class="prose">
+        <Content />
+      </div>
+    </div></article>
+  )}
 </Base>

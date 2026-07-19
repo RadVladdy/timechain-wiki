@@ -6,11 +6,14 @@
   "scripts": {
     "sync": "python3 sync-kb.py",
     "dev": "astro dev",
-    "build": "npm run sync && astro build",
+    "build": "npm run sync && astro build && pagefind --site dist",
     "preview": "astro preview"
   },
   "dependencies": {
     "astro": "^5.6.1",
     "remark-wiki-link": "^2.0.1"
+  },
+  "devDependencies": {
+    "pagefind": "^1.5.2"
   }
 }

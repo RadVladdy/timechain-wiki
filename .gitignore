@@ -3,4 +3,6 @@ dist/
 .astro/
 src/content/wiki/
 src/lib/wiki-index.json
+src/lib/sections-data.json
+.wrangler/
 .DS_Store

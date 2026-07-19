@@ -1,0 +1,87 @@
+---
+// The structure-forward walk-down for a section (a KB sub-MOC): its clusters →
+// entries, each with learning level, plus the area's thinkers and sources. Cluster
+// data is parsed in sync-kb.py (src/lib/sections-data.json); thinkers/sources come
+// straight from note frontmatter.
+const { title, group, scope, summary, clusters = [], thinkers = [], sources = [] } = Astro.props;
+
+// Split a learning level like "Introductory → Foundational" into ordered chips.
+function levelChips(level) {
+  if (!level) return [];
+  return level.split(/→|-|–|—/).map((s) => s.trim()).filter(Boolean);
+}
+const levelClass = (l) => "lv-" + (l.toLowerCase().split(" ")[0] || "x");
+const entryCount = clusters.reduce((n, c) => n + c.entries.length, 0);
+---
+<article class="section" data-pagefind-body>
+  <nav class="crumbs">
+    <a href="/">Home</a> <b>›</b>
+    <span class="mv">{group.roman === "·" ? "Resources" : `${group.roman}. ${group.label}`}</span> <b>›</b>
+    {title}
+  </nav>
+
+  <header class="shead">
+    <div class="eyebrow" data-pagefind-ignore>{group.roman === "·" ? "Resources" : `Movement ${group.roman} · ${group.label}`}</div>
+    <h1 data-pagefind-meta="title">{title}</h1>
+    {scope && <p class="sscope">{scope}</p>}
+    {summary && <p class="ssum">{summary}</p>}
+    <div class="sfacts" data-pagefind-ignore>
+      <span><b>{clusters.length}</b> clusters</span>
+      <span><b>{entryCount}</b> entries</span>
+      {thinkers.length > 0 && <span><b>{thinkers.length}</b> thinkers</span>}
+      {sources.length > 0 && <span><b>{sources.length}</b> sources</span>}
+    </div>
+  </header>
+
+  {clusters.map((c, i) => (
+    <section class="cluster">
+      <div class="cl-h">
+        <span class="cl-n" data-pagefind-ignore>{String(i + 1).padStart(2, "0")}</span>
+        <div>
+          <h2>{c.title}</h2>
+          {c.intro && <p class="cl-intro">{c.intro}</p>}
+        </div>
+      </div>
+      <div class="entries">
+        {c.entries.map((e) => {
+          const Tag = e.hasPage ? "a" : "div";
+          return (
+            <Tag class={`entry${e.hasPage ? "" : " noref"}`} href={e.hasPage ? `/wiki/${e.slug}` : undefined}>
+              <div class="e-top">
+                <span class="e-title">{e.title}</span>
+                {e.medium && <span class="e-medium">{e.medium}</span>}
+                {e.crosslisted && <span class="e-xl" title="Homed in another section">↗ cross-listed</span>}
+              </div>
+              {e.desc && <p class="e-desc">{e.desc}</p>}
+              <div class="e-foot">
+                {levelChips(e.level).map((l) => <span class={`lvl ${levelClass(l)}`}>{l}</span>)}
+                {e.hasPage && <span class="e-arw" aria-hidden="true">→</span>}
+              </div>
+            </Tag>
+          );
+        })}
+      </div>
+    </section>
+  ))}
+
+  {(thinkers.length > 0 || sources.length > 0) && (
+    <section class="rails" data-pagefind-ignore>
+      {thinkers.length > 0 && (
+        <div class="rail">
+          <h3>Thinkers in this section</h3>
+          <div class="chips">
+            {thinkers.map((t) => <a class="pill" href={`/wiki/${t.slug}`}>{t.title}</a>)}
+          </div>
+        </div>
+      )}
+      {sources.length > 0 && (
+        <div class="rail">
+          <h3>Sources in this section</h3>
+          <div class="chips">
+            {sources.map((s) => <a class="pill" href={`/wiki/${s.slug}`}>{s.title}</a>)}
+          </div>
+        </div>
+      )}
+    </section>
+  )}
+</article>

@@ -64,3 +64,13 @@ export const GROUPS = [
 
 // Flat list (some callers just want every section).
 export const SECTIONS = GROUPS.flatMap((g) => g.sections);
+
+// Resolve a section slug to its section definition + the movement it sits under
+// (for breadcrumbs and the section-page masthead). Returns null for non-section slugs.
+export function findSection(slug) {
+  for (const g of GROUPS) {
+    const section = g.sections.find((s) => s.slug === slug);
+    if (section) return { group: g, section };
+  }
+  return null;
+}
