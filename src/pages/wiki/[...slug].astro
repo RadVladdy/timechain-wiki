@@ -61,7 +61,7 @@ const meta = [d.type, d.area, d.level].filter(Boolean);
       <h1 class="dt" data-pagefind-meta="title">{title}</h1>
       {meta.length > 0 && <div class="dmeta" data-pagefind-ignore>{meta.map((m) => <span>{m}</span>)}</div>}
       {tags.length > 0 && <div class="tagrow" data-pagefind-ignore>{tags.map((t) => <span>#{t}</span>)}</div>}
-      <div class="prose">
+      <div class="prose" data-annotate>
         <Content />
       </div>
     </div></article>

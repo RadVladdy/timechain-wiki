@@ -138,9 +138,12 @@ const full = title === "Timechain Wiki" ? title : `${title} — Timechain Wiki`;
         root.setAttribute("data-theme", next);
         try { localStorage.setItem("tw-theme", next); } catch (e) {}
       });
-      document.getElementById("signin")?.addEventListener("click", () => {
-        alert("Reader sign-in (Nostr / Pubky) + highlight-and-note arrives in Phase 3.");
-      });
+    </script>
+
+    <script>
+      // Reader annotation (Phase 3) — select-to-highlight + notes, Nostr sync.
+      import { init } from "../lib/annotate.js";
+      init();
     </script>
   </body>
 </html>
