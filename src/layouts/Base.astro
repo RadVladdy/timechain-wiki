@@ -1,0 +1,58 @@
+---
+import "../styles/global.css";
+const { title = "Timechain Wiki", description = "The Bitcoin encyclopedia — a structured, non-tribal reference." } = Astro.props;
+const full = title === "Timechain Wiki" ? title : `${title} — Timechain Wiki`;
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{full}</title>
+    <meta name="description" content={description} />
+    <script is:inline>
+      (() => {
+        try {
+          const t = localStorage.getItem("tw-theme");
+          if (t) document.documentElement.setAttribute("data-theme", t);
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <div class="topbar"><div class="wrap"><div class="row">
+      <a class="brand" href="/">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="2.5" y="8" width="7" height="7" rx="1.4" stroke="var(--brass)" stroke-width="1.7"/><rect x="14.5" y="9" width="7" height="7" rx="1.4" stroke="var(--brass)" stroke-width="1.7"/><path d="M9.5 11.5h5" stroke="var(--brass)" stroke-width="1.7"/></svg>
+        <span class="t">Timechain</span><span class="w">Wiki</span>
+      </a>
+      <div class="spacer"></div>
+      <button class="chip" type="button" id="signin"><span class="dot"></span>Sign in · Nostr / Pubky</button>
+      <button class="iconbtn" type="button" id="theme" aria-label="Toggle light/dark">◐</button>
+    </div></div></div>
+
+    <main>
+      <slot />
+    </main>
+
+    <footer class="foot"><div class="wrap">
+      <div class="disc"><b style="color:var(--brass)">Phase-1 preview</b> — the Timechain Wiki foundation: the Bitcoin knowledge base rendered from source, internal editor notes removed, the archival design applied. Structured navigation, search, and Nostr/Pubky annotation land in later phases.</div>
+      <div class="fr">
+        <span>Timechain Wiki · built on the media-neutral Bitcoin knowledge base</span>
+        <span class="mono">rendered from source · CC-BY where the source allows</span>
+      </div>
+    </div></footer>
+
+    <script is:inline>
+      const root = document.documentElement;
+      document.getElementById("theme")?.addEventListener("click", () => {
+        const cur = root.getAttribute("data-theme") || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+        const next = cur === "dark" ? "light" : "dark";
+        root.setAttribute("data-theme", next);
+        try { localStorage.setItem("tw-theme", next); } catch (e) {}
+      });
+      document.getElementById("signin")?.addEventListener("click", () => {
+        alert("Reader sign-in (Nostr / Pubky) + highlight-and-note arrives in Phase 3.");
+      });
+    </script>
+  </body>
+</html>

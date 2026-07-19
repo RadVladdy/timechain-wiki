@@ -1,0 +1,58 @@
+---
+import Base from "../layouts/Base.astro";
+import { SECTIONS } from "../lib/sections.js";
+import { getCollection } from "astro:content";
+
+const all = await getCollection("wiki");
+const byType = (t) => all.filter((e) => e.data.type === t).length;
+const stats = { notes: byType("note"), thinkers: byType("thinker"), sources: byType("source"), maps: byType("sub-MOC") };
+
+function count(area) {
+  if (!area) return null;
+  if (area === "education") return all.filter((e) => e.data.type === "source" && e.data.area === "education").length;
+  return all.filter((e) => e.data.type === "note" && e.data.area === area).length;
+}
+---
+<Base title="Timechain Wiki">
+  <header class="hero"><div class="wrap">
+    <div class="kicker"><span class="eyebrow">The Bitcoin encyclopedia</span><span class="rule"></span><span class="eyebrow">{all.length} entries</span></div>
+    <h1>A structured reference for Bitcoin —<br />walk the <em>argument</em>, don't just search it.</h1>
+    <p class="lede">Timechain Wiki renders a painstakingly organized knowledge base as a public encyclopedia. Every entry sits inside a deliberate structure — <strong>16 sections, mapped and cross-linked</strong> — so you can follow the reasoning, not just look up a term.</p>
+
+    <div class="searchbar">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" style="color:var(--brass)"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><path d="M16.5 16.5 21 21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <span>Full-text search arrives in Phase 2 (Pagefind)</span>
+      <span class="kbd">⌘K</span>
+    </div>
+
+    <div class="stats">
+      <div class="stat"><b>{stats.notes}</b><span>Concept notes</span></div>
+      <div class="stat"><b>{stats.thinkers}</b><span>Thinkers</span></div>
+      <div class="stat"><b>{stats.sources}</b><span>Sources</span></div>
+      <div class="stat"><b>{stats.maps}</b><span>Section maps</span></div>
+    </div>
+  </div></header>
+
+  <section class="sec"><div class="wrap">
+    <div class="sec-h"><span class="tag">The map · §1–§16</span><h2>The structure is the content</h2><p>Sixteen sections in deliberate order. Each opens its section map — the curated front door to that part of the knowledge base.</p></div>
+
+    <div class="map">
+      {SECTIONS.map((s) => {
+        const c = count(s.area);
+        return (
+          <a class="node" href={`/wiki/${s.slug}`}>
+            <div class="num">{s.num}</div>
+            <div>
+              <div class="title">{s.title}</div>
+              <div class="scope">{s.scope}</div>
+            </div>
+            <div class="meta">
+              <span class="count">{c == null ? "cross-cutting" : `${c} notes`}</span>
+              <span class="arw">→</span>
+            </div>
+          </a>
+        );
+      })}
+    </div>
+  </div></section>
+</Base>

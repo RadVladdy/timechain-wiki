@@ -1,0 +1,16 @@
+{
+  "name": "timechain-wiki",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "sync": "python3 sync-kb.py",
+    "dev": "astro dev",
+    "build": "npm run sync && astro build",
+    "preview": "astro preview"
+  },
+  "dependencies": {
+    "astro": "^5.6.1",
+    "remark-wiki-link": "^2.0.1"
+  }
+}
