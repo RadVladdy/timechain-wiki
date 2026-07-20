@@ -77,7 +77,9 @@ a{color:inherit}
 /* topbar search chip */
 .chip.srch{gap:8px}
 .chip.srch .kbd{font-family:var(--mono);font-size:10px;border:1px solid var(--line);border-radius:5px;padding:1px 5px;color:var(--ink-faint)}
-@media (max-width:640px){.chip.srch .srch-t,.chip.srch .kbd{display:none}.chip.srch{padding:8px}#signin .dot{margin:0}#signin{font-size:0;gap:0;padding:8px}}
+@media (max-width:640px){.chip.srch .srch-t,.chip.srch .kbd{display:none}.chip.srch{padding:8px}#signin .dot{margin:0}#signin{font-size:0;gap:0;padding:8px}
+/* when signed in, show the short id so mobile confirms the logged-in identity */
+#signin.tw-in{font-size:11px;gap:7px;padding:7px 11px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
 
 /* ── ⌘K search modal ── */
 .modal{position:fixed;inset:0;z-index:80;display:flex;align-items:flex-start;justify-content:center;padding:12vh 18px 18px}

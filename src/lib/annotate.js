@@ -291,19 +291,31 @@ pkModal.innerHTML = `
     <div class="tw-dialog-actions"><button type="button" class="tw-dialog-cancel" data-pkcancel>Cancel</button></div>
   </div>`;
 document.body.appendChild(pkModal);
-let pkCancel = null;
-pkModal.querySelectorAll("[data-pkcancel]").forEach((e) => e.addEventListener("click", () => pkCancel && pkCancel()));
-document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !pkModal.hidden) pkCancel && pkCancel(); });
+pkModal.querySelectorAll("[data-pkcancel]").forEach((e) => e.addEventListener("click", cancelPubky));
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !pkModal.hidden) cancelPubky(); });
 function showPubkyDialog(url, qrSvg) {
   pkModal.querySelector(".tw-qr").innerHTML = qrSvg;
   pkModal.querySelector(".tw-pk-open").href = url;
   pkModal.hidden = false;
-  return new Promise((resolve) => { pkCancel = () => { hidePubkyDialog(); resolve(); }; });
 }
-function hidePubkyDialog() { pkModal.hidden = true; pkCancel = null; }
+function hidePubkyDialog() { pkModal.hidden = true; }
+async function cancelPubky() { hidePubkyDialog(); try { (await plib()).cancelPending(); } catch {} }
+
+// Single completion path for a Pubky sign-in — whichever finishes first (the
+// in-page flow, a resume on return, or a resume on load). Guarded to run once.
+async function onSignedIn(u) {
+  if (!u || user) return;
+  user = u;
+  hidePubkyDialog();
+  renderChip();
+  renderAuth();
+  toast("Signed in with Pubky — your highlights will sync.");
+  await syncRemote();
+}
 
 function renderChip() {
   if (!chip) return;
+  chip.classList.toggle("tw-in", !!user); // lets CSS show the label on mobile when signed in
   if (user) {
     chip.innerHTML = `<span class="dot on"></span>${userLabel() || "Signed in"}`;
     const how = isPubky() ? "Pubky" : user.method === "nip46" ? "remote signer" : "extension";
@@ -319,17 +331,14 @@ async function doLogin(method) {
   closeSignin();
   try {
     if (method === "pubky") {
+      // Non-blocking: show the QR/deep link, then complete via onSignedIn — which
+      // may fire here (desktop / tab stays alive) OR from the resume paths in
+      // init()/visibilitychange when the tab was backgrounded during the app switch.
       const p = await plib();
       const { url, qrSvg, approved } = p.startLogin();
-      const cancelled = showPubkyDialog(url, qrSvg);
-      const r = await Promise.race([
-        approved.then((u) => ({ u })).catch((e) => ({ err: e })),
-        cancelled.then(() => ({ cancel: true })),
-      ]);
-      hidePubkyDialog();
-      if (r.cancel) return;
-      if (r.err) { toast("Pubky sign-in didn't complete (timed out or was declined).", true); return; }
-      user = r.u;
+      showPubkyDialog(url, qrSvg);
+      approved.then(onSignedIn).catch(() => {});
+      return;
     } else {
       const lib = await nlib();
       if (method === "nip07") user = await lib.loginNip07();
@@ -437,6 +446,15 @@ export async function init() {
     try { if (saved.method === "pubky") await (await plib()).restore(); else (await nlib()).restore(); } catch {}
   }
   renderChip();
+
+  // A Pubky sign-in that finished after the hand-off to Pubky Ring (tab
+  // backgrounded or reloaded) is picked up here on return: resume on load, and
+  // again whenever the tab becomes visible, until we're signed in.
+  const pubkyPending = () => { try { return !!sessionStorage.getItem("tw:pubky-pending"); } catch { return false; } };
+  const tryResume = () => { if (!user && pubkyPending()) plib().then((p) => p.resume()).then(onSignedIn).catch(() => {}); };
+  if (pubkyPending()) tryResume();
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") tryResume(); });
+  window.addEventListener("focus", tryResume);
 
   root = $("[data-annotate]");
   if (!root) { fab.hidden = true; return; }

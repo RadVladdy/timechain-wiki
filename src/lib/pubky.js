@@ -34,23 +34,52 @@ const file = (k, id) => `/pub/${APP}/highlights/${k}/${id}.json`;
 
 export function hasSession() { return !!session; }
 
+// The in-flight flow's authorization URL is stashed here so a sign-in that
+// completes after an app-switch to Pubky Ring (which backgrounds or reloads this
+// tab) can be RESUMED on return — the relay message lives ~5 min. sessionStorage,
+// per the SDK's own guidance, and it holds a short-lived secret.
+const PENDING_KEY = "tw:pubky-pending";
+export function hasPending() { try { return !!sessionStorage.getItem(PENDING_KEY); } catch { return false; } }
+function savePending(url) { try { sessionStorage.setItem(PENDING_KEY, url); } catch {} }
+export function cancelPending() { try { sessionStorage.removeItem(PENDING_KEY); } catch {} }
+
+async function sessionToUser(s) {
+  session = s;
+  let exported = "";
+  try { exported = s.export(); } catch {}
+  const pk = s.info.publicKey.toString();
+  const u = { method: "pubky", pubky: pk, label: shortId(pk), export: exported };
+  store(u);
+  cancelPending();
+  return u;
+}
+
 // Begin a sign-in flow. Returns the pubkyauth:// URL (deep link) + a QR SVG to
-// show, and a promise that resolves to the user once approved in Pubky Ring.
+// show, and a promise that resolves to the user once approved in Pubky Ring
+// (this resolves in-page — desktop QR scan, or mobile if the tab stays alive).
 export function startLogin() {
   const flow = client().startAuthFlow(CAPS, AuthFlowKind.signin());
   const url = flow.authorizationUrl;
+  savePending(url);
   const qr = qrcode(0, "M");
   qr.addData(url);
   qr.make();
   const qrSvg = qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
-  const approved = flow.awaitApproval().then((s) => {
-    session = s;
-    const pk = s.info.publicKey.toString();
-    const u = { method: "pubky", pubky: pk, label: shortId(pk), export: s.export() };
-    store(u);
-    return u;
-  });
+  const approved = flow.awaitApproval().then(sessionToUser);
   return { url, qrSvg, approved };
+}
+
+// Pick up an approval that landed while the tab was backgrounded/reloaded during
+// the hand-off to Pubky Ring. Returns the user, or null if nothing's pending / it
+// expired. Clears the pending marker on a terminal failure so it won't retry.
+export async function resume() {
+  let url;
+  try { url = sessionStorage.getItem(PENDING_KEY); } catch {}
+  if (!url) return null;
+  try {
+    const flow = client().resumeAuthFlow(url);
+    return await flow.awaitApproval().then(sessionToUser);
+  } catch { cancelPending(); return null; }
 }
 
 // Re-establish a saved session (needs the homeserver cookie still present). Keeps
