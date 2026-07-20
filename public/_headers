@@ -1,0 +1,4 @@
+# NIP-05 discovery must stay cross-origin readable for Nostr clients.
+/.well-known/nostr.json
+  Access-Control-Allow-Origin: *
+  Content-Type: application/json
