@@ -10,8 +10,10 @@
     "preview": "astro preview"
   },
   "dependencies": {
+    "@synonymdev/pubky": "^0.9.3",
     "astro": "^5.6.1",
     "nostr-tools": "^2.23.12",
+    "qrcode-generator": "^2.0.4",
     "remark-wiki-link": "^2.0.1"
   },
   "devDependencies": {

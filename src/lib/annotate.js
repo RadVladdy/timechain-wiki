@@ -11,16 +11,32 @@ let list = [];
 let ranges = new Map(); // id -> Range (for scroll + hit-test)
 const supportsHL = typeof globalThis.Highlight === "function" && !!(globalThis.CSS && CSS.highlights);
 let nostr = null; // lazy-loaded ./nostr.js
-let user = null;
+let pubkyMod = null; // lazy-loaded ./pubky.js
+let user = null; // { method:'nip07'|'nip46'|'pubky', … }
 
 const $ = (sel, r = document) => r.querySelector(sel);
 const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
 const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
 
 async function nlib() { if (!nostr) nostr = await import("./nostr.js"); return nostr; }
-// Read the stored session without pulling in nostr-tools — keeps the heavy
-// bundle off the page for the common anonymous/logged-out reader.
-function storedAuth() { try { return JSON.parse(localStorage.getItem("tw:auth") || "null"); } catch { return null; } }
+async function plib() { if (!pubkyMod) pubkyMod = await import("./pubky.js"); return pubkyMod; }
+const isPubky = () => user && user.method === "pubky";
+const userLabel = () => (isPubky() ? user.label : nshort(user.npub));
+
+// Read the stored session without pulling in the heavy sync bundles — keeps them
+// off the page for the common anonymous/logged-out reader. Either backend's key.
+function storedAuth() {
+  try { return JSON.parse(localStorage.getItem("tw:pubky") || localStorage.getItem("tw:auth") || "null"); }
+  catch { return null; }
+}
+// Publish/fetch/ready routed to whichever backend the session uses.
+async function remotePublish(h) {
+  if (isPubky()) { const p = await plib(); return p.publish(h, p.pageKey(store.pageUrl())); }
+  return (await nlib()).publish(h, store.pageUrl());
+}
+async function remoteReady() {
+  return isPubky() ? (await plib()).hasSession() : (await nlib()).hasSigner();
+}
 
 // ── painting ──────────────────────────────────────────────────────────────
 function paint() {
@@ -101,7 +117,7 @@ async function makeHighlight(range) {
     setActive(hl.id);
     requestAnimationFrame(() => { const ta = $(`.tw-item[data-id="${hl.id}"] textarea`); ta && ta.focus(); });
   }
-  if (user && (await nlib()).hasSigner()) publishOne(hl.id);
+  if (user && (await remoteReady())) publishOne(hl.id);
 }
 
 // ── side panel ───────────────────────────────────────────────────────────
@@ -162,13 +178,15 @@ function renderPanel() {
     item.appendChild(ta);
 
     const foot = el("div", "tw-item-foot");
-    const badge = el("span", "tw-badge " + (h.source === "nostr" ? "n" : "l"), h.source === "nostr" ? "Nostr" : "On this device");
+    const synced = h.source === "nostr" || h.source === "pubky";
+    const badgeText = h.source === "nostr" ? "Nostr" : h.source === "pubky" ? "Pubky" : "On this device";
+    const badge = el("span", "tw-badge " + (synced ? "n" : "l"), badgeText);
     foot.appendChild(badge);
     const spacer = el("span", "tw-sp"); foot.appendChild(spacer);
 
-    if (user && h.source !== "nostr") {
+    if (user && h.source === "local") {
       const pub = el("button", "tw-mini", "Publish");
-      pub.title = "Publish to Nostr";
+      pub.title = `Publish to ${isPubky() ? "Pubky" : "Nostr"}`;
       pub.addEventListener("click", () => publishOne(h.id, pub));
       foot.appendChild(pub);
     }
@@ -198,7 +216,7 @@ authMenu.hidden = true;
 authMenu.innerHTML = `
   <button type="button" data-m="nip07">Browser extension<span>Alby, nos2x — desktop</span></button>
   <button type="button" data-m="bunker">Amber / remote signer<span>Paste a bunker:// string</span></button>
-  <button type="button" data-m="pubky" disabled>Pubky<span>Coming next</span></button>`;
+  <button type="button" data-m="pubky">Pubky<span>Approve in Pubky Ring</span></button>`;
 document.body.appendChild(authMenu);
 
 // A styled input dialog — replaces the browser's native prompt() so every popup
@@ -241,11 +259,38 @@ function askInput({ title, desc, placeholder = "", confirmText = "Confirm" }) {
   });
 }
 
+// Pubky sign-in dialog: a QR to scan with Pubky Ring (desktop) + a deep link to
+// open it on the same device (mobile), while we wait for approval.
+const pkModal = el("div", "tw-dialog tw-pkdlg");
+pkModal.hidden = true;
+pkModal.innerHTML = `
+  <div class="tw-dialog-bg" data-pkcancel></div>
+  <div class="tw-dialog-panel" role="dialog" aria-modal="true">
+    <h3 class="tw-dialog-t">Sign in with Pubky</h3>
+    <p class="tw-dialog-d">Scan with the Pubky Ring app — or, on this phone, tap Open Pubky Ring to approve.</p>
+    <div class="tw-qr"></div>
+    <a class="tw-pk-open" href="#">Open Pubky Ring</a>
+    <div class="tw-pk-wait"><span class="tw-spin"></span>Waiting for approval…</div>
+    <div class="tw-dialog-actions"><button type="button" class="tw-dialog-cancel" data-pkcancel>Cancel</button></div>
+  </div>`;
+document.body.appendChild(pkModal);
+let pkCancel = null;
+pkModal.querySelectorAll("[data-pkcancel]").forEach((e) => e.addEventListener("click", () => pkCancel && pkCancel()));
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !pkModal.hidden) pkCancel && pkCancel(); });
+function showPubkyDialog(url, qrSvg) {
+  pkModal.querySelector(".tw-qr").innerHTML = qrSvg;
+  pkModal.querySelector(".tw-pk-open").href = url;
+  pkModal.hidden = false;
+  return new Promise((resolve) => { pkCancel = () => { hidePubkyDialog(); resolve(); }; });
+}
+function hidePubkyDialog() { pkModal.hidden = true; pkCancel = null; }
+
 function renderChip() {
   if (!chip) return;
   if (user) {
-    chip.innerHTML = `<span class="dot on"></span>${user.npub ? nshort(user.npub) : "Signed in"}`;
-    chip.title = "Signed in with " + (user.method === "nip46" ? "remote signer" : "extension") + " — click to sign out";
+    chip.innerHTML = `<span class="dot on"></span>${userLabel() || "Signed in"}`;
+    const how = isPubky() ? "Pubky" : user.method === "nip46" ? "remote signer" : "extension";
+    chip.title = "Signed in with " + how + " — click to sign out";
   } else {
     chip.innerHTML = `<span class="dot"></span>Sign in · Nostr / Pubky`;
     chip.title = "Sign in to sync highlights";
@@ -265,23 +310,37 @@ function toggleAuthMenu() {
 
 async function doLogin(method) {
   authMenu.hidden = true;
-  const lib = await nlib();
   try {
-    if (method === "nip07") user = await lib.loginNip07();
-    else if (method === "bunker") {
-      const s = await askInput({
-        title: "Connect a remote signer",
-        desc: "Paste the connect string from your signer app (in Amber: Connect → copy the bunker:// link).",
-        placeholder: "bunker://…",
-        confirmText: "Connect",
-      });
-      if (!s) return;
-      user = await lib.loginBunker(s);
-    } else return;
+    if (method === "pubky") {
+      const p = await plib();
+      const { url, qrSvg, approved } = p.startLogin();
+      const cancelled = showPubkyDialog(url, qrSvg);
+      const r = await Promise.race([
+        approved.then((u) => ({ u })).catch((e) => ({ err: e })),
+        cancelled.then(() => ({ cancel: true })),
+      ]);
+      hidePubkyDialog();
+      if (r.cancel) return;
+      if (r.err) { toast("Pubky sign-in didn't complete (timed out or was declined).", true); return; }
+      user = r.u;
+    } else {
+      const lib = await nlib();
+      if (method === "nip07") user = await lib.loginNip07();
+      else if (method === "bunker") {
+        const s = await askInput({
+          title: "Connect a remote signer",
+          desc: "Paste the connect string from your signer app (in Amber: Connect → copy the bunker:// link).",
+          placeholder: "bunker://…",
+          confirmText: "Connect",
+        });
+        if (!s) return;
+        user = await lib.loginBunker(s);
+      } else return;
+    }
     renderChip();
     renderAuth();
-    await syncFromNostr();
-    toast("Signed in — your highlights will sync.");
+    await syncRemote();
+    toast(`Signed in with ${isPubky() ? "Pubky" : "Nostr"} — your highlights will sync.`);
   } catch (e) {
     if (e.code === "no-extension" || e.message === "no-extension")
       toast("No Nostr extension found. Install Alby or nos2x, or use Amber on mobile.", true);
@@ -289,7 +348,7 @@ async function doLogin(method) {
   }
 }
 async function doLogout() {
-  (await nlib()).logout();
+  try { if (isPubky()) await (await plib()).logout(); else (await nlib()).logout(); } catch {}
   user = null;
   renderChip(); renderAuth();
   toast("Signed out. Highlights stay saved on this device.");
@@ -299,32 +358,33 @@ function renderAuth() {
   const box = panel.querySelector(".tw-auth");
   if (!box) return;
   if (user) {
-    const unpublished = list.filter((h) => h.source !== "nostr").length;
-    box.innerHTML = `<div class="tw-signed"><span class="dot on"></span>Signed in · <b>${nshort(user.npub)}</b></div>`;
+    const unpublished = list.filter((h) => h.source === "local").length;
+    box.innerHTML = `<div class="tw-signed"><span class="dot on"></span>Signed in · <b>${userLabel()}</b></div>`;
     if (unpublished > 0) {
-      const b = el("button", "tw-syncbtn", `Publish ${unpublished} to Nostr`);
+      const b = el("button", "tw-syncbtn", `Publish ${unpublished} to ${isPubky() ? "Pubky" : "Nostr"}`);
       b.addEventListener("click", () => publishAll(b));
       box.appendChild(b);
     }
   } else {
-    box.innerHTML = `<button type="button" class="tw-syncbtn ghost">Sign in with Nostr to sync</button>`;
+    box.innerHTML = `<button type="button" class="tw-syncbtn ghost">Sign in to sync across devices</button>`;
     box.querySelector("button").addEventListener("click", () => { const r = chip?.getBoundingClientRect(); authMenu.hidden = false; if (r) { authMenu.style.top = r.bottom + 8 + "px"; authMenu.style.right = Math.max(8, innerWidth - r.right) + "px"; } });
   }
 }
 
 async function publishOne(id, btn) {
-  const lib = await nlib();
   const h = list.find((x) => x.id === id);
   if (!h) return;
   if (btn) { btn.disabled = true; btn.textContent = "Publishing…"; }
   try {
-    const evid = await lib.publish(h, store.pageUrl());
-    store.upsert({ id, source: "nostr", published: true, pubkey: user.pubkey });
-    // Re-key to the event id so future fetches dedupe cleanly.
-    store.remove(id);
-    const updated = { ...h, id: evid, source: "nostr", published: true, pubkey: user.pubkey };
-    store.upsert(updated);
-    if (activeId === id) activeId = evid;
+    const newId = await remotePublish(h);           // Pubky keeps the id; Nostr returns an event id
+    const src = isPubky() ? "pubky" : "nostr";
+    if (newId && newId !== id) {
+      store.remove(id);
+      store.upsert({ ...h, id: newId, source: src, published: true, pubkey: user.pubky || user.pubkey });
+      if (activeId === id) activeId = newId;
+    } else {
+      store.upsert({ id, source: src, published: true, pubkey: user.pubky || user.pubkey });
+    }
     list = store.all();
     renderPanel(); paint();
   } catch (e) {
@@ -334,16 +394,17 @@ async function publishOne(id, btn) {
 }
 async function publishAll(btn) {
   if (btn) { btn.disabled = true; btn.textContent = "Publishing…"; }
-  for (const h of list.filter((x) => x.source !== "nostr")) await publishOne(h.id);
+  for (const h of list.filter((x) => x.source === "local")) await publishOne(h.id);
   renderPanel();
 }
 
-async function syncFromNostr() {
+async function syncRemote() {
   if (!user) return;
   try {
-    const lib = await nlib();
-    const incoming = await lib.fetch(user.pubkey, store.pageUrl());
-    if (incoming.length) { list = store.merge(incoming); paint(); renderPanel(); }
+    let incoming;
+    if (isPubky()) { const p = await plib(); incoming = await p.fetch(p.pageKey(store.pageUrl())); }
+    else { incoming = await (await nlib()).fetch(user.pubkey, store.pageUrl()); }
+    if (incoming && incoming.length) { list = store.merge(incoming); paint(); renderPanel(); }
   } catch {}
 }
 
@@ -366,10 +427,13 @@ export async function init() {
       b.addEventListener("click", () => doLogin(b.dataset.m)));
     document.addEventListener("click", (e) => { if (!authMenu.contains(e.target) && e.target !== chip) authMenu.hidden = true; });
   }
-  // Only pull in nostr-tools if there's a session to restore; anonymous readers
-  // get the highlighter with no heavy bundle.
+  // Only pull in a sync bundle if there's a session to restore; anonymous readers
+  // get the highlighter with no heavy download.
   const saved = storedAuth();
-  if (saved) { user = saved; (await nlib()).restore(); }
+  if (saved) {
+    user = saved;
+    try { if (saved.method === "pubky") await (await plib()).restore(); else (await nlib()).restore(); } catch {}
+  }
   renderChip();
 
   root = $("[data-annotate]");
@@ -410,6 +474,6 @@ export async function init() {
 
   window.addEventListener("resize", debounce(() => paint(), 150));
 
-  // If a session restored, pull this page's highlights from relays.
-  if (user) syncFromNostr();
+  // If a session restored, pull this page's highlights from the sync backend.
+  if (user) syncRemote();
 }

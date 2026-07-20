@@ -280,6 +280,18 @@ body.tw-selecting .tw-fab{visibility:hidden}
 .tw-dialog-ok{font-family:var(--sans);font-size:13.5px;font-weight:600;background:var(--brass);border:0;border-radius:9px;padding:9px 16px;color:var(--ground);cursor:pointer}
 .tw-dialog-ok:hover{background:var(--brass-bright)}
 
+/* Pubky sign-in dialog */
+.tw-pkdlg .tw-dialog-panel{text-align:center;max-width:360px}
+.tw-pkdlg .tw-dialog-d{margin-bottom:16px}
+.tw-qr{background:#fff;border-radius:12px;padding:12px;width:max-content;max-width:100%;margin:0 auto 16px;box-shadow:0 1px 0 rgba(0,0,0,.05)}
+.tw-qr svg{display:block;width:190px;height:190px}
+.tw-pk-open{display:flex;align-items:center;justify-content:center;gap:8px;font-family:var(--sans);font-size:14px;font-weight:600;color:var(--ground);background:var(--brass);border-radius:10px;padding:12px 16px;text-decoration:none;margin-bottom:14px}
+.tw-pk-open:hover{background:var(--brass-bright)}
+.tw-pk-wait{display:flex;align-items:center;justify-content:center;gap:9px;color:var(--ink-soft);font-size:13px}
+.tw-spin{width:14px;height:14px;border:2px solid var(--line);border-top-color:var(--brass);border-radius:50%;animation:tw-spin .7s linear infinite}
+@keyframes tw-spin{to{transform:rotate(360deg)}}
+.tw-pkdlg .tw-dialog-actions{justify-content:center;margin-top:16px}
+
 .tw-toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,20px);z-index:99;background:var(--raise);border:1px solid var(--line);border-left:3px solid var(--sage);border-radius:10px;padding:11px 16px;color:var(--ink);font-size:13.5px;max-width:min(440px,92vw);box-shadow:var(--shadow);opacity:0;pointer-events:none;transition:.22s}
 .tw-toast.show{opacity:1;transform:translate(-50%,0)}
 .tw-toast.warn{border-left-color:#c2564a}
