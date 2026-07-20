@@ -385,10 +385,11 @@ function renderChip() {
   if (!chip) return;
   chip.classList.toggle("tw-in", !!user); // lets CSS show the label on mobile when signed in
   if (user) {
+    const initial = (userLabel() || "•").trim().slice(0, 1).toUpperCase();
     const badge = user.avatar
       ? `<span class="tw-chip-av" style="background-image:url('${user.avatar}')"></span>`
-      : `<span class="dot on"></span>`;
-    chip.innerHTML = badge + (userLabel() || "Signed in");
+      : `<span class="tw-chip-av tw-chip-av--i">${initial}</span>`;
+    chip.innerHTML = badge + `<span class="tw-chip-label">${userLabel() || "Signed in"}</span>`;
     const how = isPubky() ? "Pubky" : user.method === "nip46" ? "remote signer" : "extension";
     chip.title = "Signed in with " + how + " — click to sign out";
   } else {
