@@ -12,6 +12,13 @@ export const RELAYS = [
   "wss://relay.primal.net",
   "wss://relay.nostr.band",
 ];
+// Profile (kind-0) lookups — include purplepag.es, the profile-metadata relay
+// that aggregates kind-0 across the network, so avatars resolve reliably.
+const PROFILE_RELAYS = ["wss://purplepag.es", "wss://relay.nostr.band", "wss://relay.damus.io", "wss://nos.lol"];
+
+const toHex = (b) => Array.from(b).map((x) => x.toString(16).padStart(2, "0")).join("");
+const fromHex = (h) => new Uint8Array(h.match(/.{1,2}/g).map((x) => parseInt(x, 16)));
+const onAuth = (url) => { try { window.open(url, "_blank", "noopener"); } catch {} };
 
 // Canonical host so highlight `r` tags match across preview deploy-hash
 // subdomains and (eventually) the real domain — read-back stays self-consistent.
@@ -32,15 +39,30 @@ export function npubShort(pubkey) {
   catch { return pubkey.slice(0, 8) + "…"; }
 }
 
-// Re-establish a signer for an already-stored session (extension only; a bunker
-// session needs an explicit reconnect, handled at publish time).
+// Re-establish a signer for an already-stored session. Extension = re-wrap
+// window.nostr. Bunker = rebuild from the SAME stored local key WITHOUT calling
+// connect() again (Amber already approved this key — a fresh connect() would be
+// rejected "already connected"); fromBunker sets up the subscription, so
+// signEvent works directly.
 export async function restore() {
   const u = storedUser();
   if (!u) return null;
   if (u.method === "nip07" && globalThis.nostr) {
     signer = { pubkey: u.pubkey, signEvent: (e) => globalThis.nostr.signEvent(e) };
+  } else if (u.method === "nip46") {
+    try { await reconnectBunker(u); } catch {}
   }
   return u;
+}
+
+async function reconnectBunker(u) {
+  if (!u || !u.local || !u.bunker) return false;
+  const { BunkerSigner, parseBunkerInput } = await import("nostr-tools/nip46");
+  const bp = await parseBunkerInput(u.bunker);
+  if (!bp) return false;
+  const bunker = BunkerSigner.fromBunker(fromHex(u.local), bp, { pool, onauth: onAuth });
+  signer = { pubkey: u.pubkey, signEvent: (e) => bunker.signEvent(e) };
+  return true;
 }
 
 export async function loginNip07() {
@@ -63,16 +85,13 @@ export async function loginBunker(connectString) {
   if (!bp) throw new Error("bad-bunker-string");
   const local = generateSecretKey();
   // fromBunker is the current factory — the constructor is private (calling `new`
-  // left `bp` unset → "this.bp is undefined"). onauth opens the approval URL some
-  // signers hand back (Amber usually approves via its own prompt instead).
-  const bunker = BunkerSigner.fromBunker(local, bp, {
-    pool,
-    onauth: (url) => { try { window.open(url, "_blank", "noopener"); } catch {} },
-  });
+  // left `bp` unset → "this.bp is undefined"). connect() once for first-time
+  // approval; we persist the local key so later loads reconnect WITHOUT re-connecting.
+  const bunker = BunkerSigner.fromBunker(local, bp, { pool, onauth: onAuth });
   await bunker.connect();
   const pubkey = await bunker.getPublicKey();
   signer = { pubkey, signEvent: (e) => bunker.signEvent(e) };
-  const u = { pubkey, npub: nip19.npubEncode(pubkey), method: "nip46", bunker: connectString.trim() };
+  const u = { pubkey, npub: nip19.npubEncode(pubkey), method: "nip46", bunker: connectString.trim(), local: toHex(local) };
   store(u);
   return u;
 }
@@ -87,9 +106,8 @@ export function hasSigner() { return !!signer; }
 // Build + sign + publish a kind-9802 highlight. Returns the event id.
 export async function publish(hl, path) {
   if (!signer) {
-    // A stored bunker session that hasn't reconnected this load.
     const u = storedUser();
-    if (u?.method === "nip46" && u.bunker) await loginBunker(u.bunker);
+    if (u?.method === "nip46") await reconnectBunker(u);
     if (!signer) throw new Error("not-signed-in");
   }
   const a = hl.anchor || {};
@@ -119,7 +137,7 @@ export async function publish(hl, path) {
 export async function deleteEvent(id) {
   if (!signer) {
     const u = storedUser();
-    if (u?.method === "nip46" && u.bunker) await loginBunker(u.bunker);
+    if (u?.method === "nip46") await reconnectBunker(u);
     if (!signer) return;
   }
   const tmpl = {
@@ -137,7 +155,7 @@ export async function deleteEvent(id) {
 export async function fetchProfile(pubkey, ms = 2500) {
   const events = await new Promise((resolve) => {
     const found = [];
-    const sub = pool.subscribeMany(RELAYS, [{ kinds: [0], authors: [pubkey], limit: 1 }], {
+    const sub = pool.subscribeMany(PROFILE_RELAYS, [{ kinds: [0], authors: [pubkey], limit: 1 }], {
       onevent: (e) => found.push(e),
       oneose: () => {},
     });
