@@ -107,8 +107,8 @@ document.body.appendChild(panel);
 
 const fab = el("button", "tw-fab");
 fab.type = "button";
-fab.setAttribute("aria-label", "Your highlights");
-fab.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M4 20h16M6 16l9-9a2 2 0 0 1 3 0a2 2 0 0 1 0 3l-9 9H6v-3Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg><span class="tw-fab-n">0</span>`;
+fab.setAttribute("aria-label", "Highlights & notes");
+fab.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M4 20h16M6 16l9-9a2 2 0 0 1 3 0a2 2 0 0 1 0 3l-9 9H6v-3Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg><span class="tw-fab-t">Highlights</span><span class="tw-fab-n"></span>`;
 document.body.appendChild(fab);
 
 let lastClose = 0;
@@ -116,8 +116,7 @@ function openPanel() { panel.hidden = false; renderPanel(); }
 function closePanel() { panel.hidden = true; activeId = null; lastClose = Date.now(); paint(); }
 function updateFab() {
   const n = list.length;
-  fab.querySelector(".tw-fab-n").textContent = n;
-  fab.classList.toggle("has", n > 0);
+  fab.querySelector(".tw-fab-n").textContent = n > 0 ? n : "";
   panel.querySelector(".tw-count").textContent = n;
 }
 
