@@ -21,7 +21,7 @@ const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = se
 async function nlib() { if (!nostr) nostr = await import("./nostr.js"); return nostr; }
 async function plib() { if (!pubkyMod) pubkyMod = await import("./pubky.js"); return pubkyMod; }
 const isPubky = () => user && user.method === "pubky";
-const userLabel = () => (isPubky() ? user.label : nshort(user.npub));
+const userLabel = () => (user && user.name) || (isPubky() ? user.label : nshort(user.npub));
 
 // Read the stored session without pulling in the heavy sync bundles — keeps them
 // off the page for the common anonymous/logged-out reader. Either backend's key.
@@ -148,10 +148,18 @@ function updateFab() {
   panel.querySelector(".tw-count").textContent = n;
 }
 
-const saveNote = debounce((id, val) => {
+const saveNote = debounce(async (id, val) => {
   store.upsert({ id, note: val });
   list = store.all();
-}, 350);
+  // If this highlight is synced to Pubky, an edited note re-writes the homeserver
+  // record (putJson overwrites). Nostr kind-9802 events are immutable, so a Nostr
+  // highlight's note edit stays local.
+  const hl = list.find((x) => x.id === id);
+  if (hl && hl.source === "pubky" && isPubky()) {
+    try { const p = await plib(); await p.publish(hl, p.pageKey(store.pageUrl())); }
+    catch (e) { toast("Couldn't save the note to Pubky: " + (e.message || e), true); }
+  }
+}, 500);
 
 function renderPanel() {
   renderAuth();
@@ -191,7 +199,19 @@ function renderPanel() {
       foot.appendChild(pub);
     }
     const del = el("button", "tw-mini danger", "Delete");
-    del.addEventListener("click", () => { store.remove(h.id); list = store.all(); if (activeId === h.id) activeId = null; renderPanel(); paint(); });
+    del.addEventListener("click", async () => {
+      const hl = list.find((x) => x.id === h.id);
+      // Delete from the server too when synced — otherwise it'd reappear on the
+      // next sync. Pubky: remove the homeserver record (block local delete if that
+      // fails, so the user can retry). Nostr: best-effort kind-5 deletion.
+      if (hl && hl.source === "pubky") {
+        try { const p = await plib(); await p.remove(hl.id, p.pageKey(store.pageUrl())); }
+        catch (e) { toast("Couldn't delete from Pubky: " + (e.message || e), true); return; }
+      } else if (hl && hl.source === "nostr") {
+        try { await (await nlib()).deleteEvent(hl.id); } catch {}
+      }
+      store.remove(h.id); list = store.all(); if (activeId === h.id) activeId = null; renderPanel(); paint();
+    });
     foot.appendChild(del);
     item.appendChild(foot);
 
@@ -230,11 +250,58 @@ signinModal.innerHTML = `
     <div class="tw-dialog-actions"><button type="button" class="tw-dialog-cancel" data-siclose>Cancel</button></div>
   </div>`;
 document.body.appendChild(signinModal);
-function openSignin() { if (user) { doLogout(); return; } signinModal.hidden = false; }
 function closeSignin() { signinModal.hidden = true; }
 signinModal.querySelectorAll("[data-siclose]").forEach((e) => e.addEventListener("click", closeSignin));
 signinModal.querySelectorAll("button[data-m]").forEach((b) => b.addEventListener("click", () => { closeSignin(); doLogin(b.dataset.m); }));
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !signinModal.hidden) closeSignin(); });
+
+// Account menu — shown when the chip is clicked while signed in (previously this
+// signed out on the first click, with no way to see the account or cancel).
+const accountModal = el("div", "tw-dialog tw-account");
+accountModal.hidden = true;
+accountModal.innerHTML = `
+  <div class="tw-dialog-bg" data-acclose></div>
+  <div class="tw-dialog-panel" role="dialog" aria-modal="true">
+    <div class="tw-acc-head">
+      <div class="tw-acc-av"></div>
+      <div class="tw-acc-meta"><b class="tw-acc-name"></b><span class="tw-acc-id mono"></span></div>
+    </div>
+    <p class="tw-dialog-d tw-acc-sub"></p>
+    <div class="tw-dialog-actions">
+      <button type="button" class="tw-dialog-cancel" data-acclose>Close</button>
+      <button type="button" class="tw-dialog-ok tw-acc-out">Sign out</button>
+    </div>
+  </div>`;
+document.body.appendChild(accountModal);
+function closeAccount() { accountModal.hidden = true; }
+accountModal.querySelectorAll("[data-acclose]").forEach((e) => e.addEventListener("click", closeAccount));
+accountModal.querySelector(".tw-acc-out").addEventListener("click", () => { closeAccount(); doLogout(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !accountModal.hidden) closeAccount(); });
+
+async function openAccount() {
+  const how = isPubky() ? "Pubky" : user.method === "nip46" ? "Nostr · remote signer" : "Nostr · browser extension";
+  accountModal.querySelector(".tw-acc-name").textContent = user.name || userLabel();
+  accountModal.querySelector(".tw-acc-id").textContent = isPubky() ? user.pubky : (user.npub || "");
+  accountModal.querySelector(".tw-acc-sub").textContent = `Signed in with ${how}. Your highlights sync to your account; they also stay on this device.`;
+  const av = accountModal.querySelector(".tw-acc-av");
+  av.style.backgroundImage = user.avatar ? `url("${user.avatar}")` : "";
+  av.textContent = user.avatar ? "" : (user.name || userLabel() || "•").slice(0, 1).toUpperCase();
+  accountModal.hidden = false;
+  if (isPubky() && user.name === undefined) loadProfile(); // fetch once, lazily
+}
+
+function openSignin() { if (user) { openAccount(); return; } signinModal.hidden = false; }
+
+// Pull the reader's Pubky profile (name + avatar) and refresh the chip + menu.
+async function loadProfile() {
+  try {
+    const prof = await (await plib()).getProfile();
+    user.name = prof?.name || null;
+    user.avatar = prof?.image || null;
+    renderChip();
+    if (!accountModal.hidden) openAccount();
+  } catch { user.name = null; }
+}
 
 // A styled input dialog — replaces the browser's native prompt() so every popup
 // matches the site. askInput() resolves to the trimmed value or null (cancel).
@@ -310,6 +377,7 @@ async function onSignedIn(u) {
   renderChip();
   renderAuth();
   toast("Signed in with Pubky — your highlights will sync.");
+  loadProfile();      // name + avatar, async; refreshes the chip when it arrives
   await syncRemote();
 }
 
@@ -317,7 +385,10 @@ function renderChip() {
   if (!chip) return;
   chip.classList.toggle("tw-in", !!user); // lets CSS show the label on mobile when signed in
   if (user) {
-    chip.innerHTML = `<span class="dot on"></span>${userLabel() || "Signed in"}`;
+    const badge = user.avatar
+      ? `<span class="tw-chip-av" style="background-image:url('${user.avatar}')"></span>`
+      : `<span class="dot on"></span>`;
+    chip.innerHTML = badge + (userLabel() || "Signed in");
     const how = isPubky() ? "Pubky" : user.method === "nip46" ? "remote signer" : "extension";
     chip.title = "Signed in with " + how + " — click to sign out";
   } else {
@@ -443,7 +514,10 @@ export async function init() {
   const saved = storedAuth();
   if (saved) {
     user = saved;
-    try { if (saved.method === "pubky") await (await plib()).restore(); else (await nlib()).restore(); } catch {}
+    try {
+      if (saved.method === "pubky") { await (await plib()).restore(); loadProfile(); }
+      else (await nlib()).restore();
+    } catch {}
   }
   renderChip();
 

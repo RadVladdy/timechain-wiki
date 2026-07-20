@@ -108,6 +108,25 @@ export async function publish(hl, path) {
   return signed.id;
 }
 
+// Request deletion of a highlight event (NIP-09 kind-5). Best-effort — relays
+// may or may not honor it; the highlight is removed locally regardless.
+export async function deleteEvent(id) {
+  if (!signer) {
+    const u = storedUser();
+    if (u?.method === "nip46" && u.bunker) await loginBunker(u.bunker);
+    if (!signer) return;
+  }
+  const tmpl = {
+    kind: 5,
+    created_at: Math.floor(Date.now() / 1000),
+    content: "",
+    tags: [["e", id], ["k", "9802"]],
+    pubkey: signer.pubkey,
+  };
+  const signed = await signer.signEvent(tmpl);
+  await Promise.any(pool.publish(RELAYS, signed)).catch(() => {});
+}
+
 // Fetch this reader's highlights for one page. Resolves after a short window.
 export async function fetch(pubkey, path, ms = 2500) {
   const filter = { kinds: [9802], authors: [pubkey], "#r": [canonUrl(path)] };

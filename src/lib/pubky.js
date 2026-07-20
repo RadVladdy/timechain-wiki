@@ -112,6 +112,28 @@ export async function remove(id, key) {
   try { await session.storage.delete(file(key, id)); } catch {}
 }
 
+// The reader's pubky.app profile (name + avatar), if they have one. Best-effort:
+// many Pubky Ring users have no pubky.app profile, so null is normal.
+export async function getProfile() {
+  if (!session) return null;
+  try {
+    const prof = await session.storage.getJson("/pub/pubky.app/profile.json");
+    if (!prof) return null;
+    let image = null;
+    const img = prof.image;
+    if (typeof img === "string" && img) {
+      if (/^https?:\/\//.test(img)) image = img;
+      else {
+        try {
+          const path = img.startsWith("pubky://") ? img.replace(/^pubky:\/\/[^/]+/, "") : (img.startsWith("/pub/") ? img : null);
+          if (path) { const bytes = await session.storage.getBytes(path); image = URL.createObjectURL(new Blob([bytes])); }
+        } catch {}
+      }
+    }
+    return { name: prof.name || null, image };
+  } catch { return null; }
+}
+
 // Fetch this page's highlights from the homeserver.
 export async function fetch(key) {
   if (!session) return [];
