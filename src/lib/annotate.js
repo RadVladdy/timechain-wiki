@@ -211,13 +211,30 @@ function scrollTo(id) {
 
 // ── auth ────────────────────────────────────────────────────────────────
 const chip = $("#signin");
-const authMenu = el("div", "tw-authmenu");
-authMenu.hidden = true;
-authMenu.innerHTML = `
-  <button type="button" data-m="nip07">Browser extension<span>Alby, nos2x — desktop</span></button>
-  <button type="button" data-m="bunker">Amber / remote signer<span>Paste a bunker:// string</span></button>
-  <button type="button" data-m="pubky">Pubky<span>Approve in Pubky Ring</span></button>`;
-document.body.appendChild(authMenu);
+
+// A centered sign-in chooser (Pubky + Nostr), opened from the top chip or the
+// panel's "Sign in" button. A modal rather than an anchored dropdown so it works
+// on mobile and can't be dismissed by the same click that opened it.
+const signinModal = el("div", "tw-dialog tw-signin");
+signinModal.hidden = true;
+signinModal.innerHTML = `
+  <div class="tw-dialog-bg" data-siclose></div>
+  <div class="tw-dialog-panel" role="dialog" aria-modal="true">
+    <h3 class="tw-dialog-t">Sign in to sync</h3>
+    <p class="tw-dialog-d">Your highlights already save on this device. Sign in to sync them across your devices — your keys, your data, no account with us.</p>
+    <div class="tw-signin-opts">
+      <button type="button" data-m="pubky"><b>Pubky</b><span>Approve in Pubky Ring (QR or deep link)</span></button>
+      <button type="button" data-m="nip07"><b>Nostr — browser extension</b><span>Alby, nos2x (desktop)</span></button>
+      <button type="button" data-m="bunker"><b>Nostr — Amber / remote signer</b><span>Paste a bunker:// string</span></button>
+    </div>
+    <div class="tw-dialog-actions"><button type="button" class="tw-dialog-cancel" data-siclose>Cancel</button></div>
+  </div>`;
+document.body.appendChild(signinModal);
+function openSignin() { if (user) { doLogout(); return; } signinModal.hidden = false; }
+function closeSignin() { signinModal.hidden = true; }
+signinModal.querySelectorAll("[data-siclose]").forEach((e) => e.addEventListener("click", closeSignin));
+signinModal.querySelectorAll("button[data-m]").forEach((b) => b.addEventListener("click", () => { closeSignin(); doLogin(b.dataset.m); }));
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !signinModal.hidden) closeSignin(); });
 
 // A styled input dialog — replaces the browser's native prompt() so every popup
 // matches the site. askInput() resolves to the trimmed value or null (cancel).
@@ -298,18 +315,8 @@ function renderChip() {
 }
 function nshort(npub) { return npub.slice(0, 10) + "…" + npub.slice(-4); }
 
-function toggleAuthMenu() {
-  if (user) { doLogout(); return; }
-  authMenu.hidden = !authMenu.hidden;
-  if (!authMenu.hidden && chip) {
-    const r = chip.getBoundingClientRect();
-    authMenu.style.top = r.bottom + 8 + "px";
-    authMenu.style.right = Math.max(8, innerWidth - r.right) + "px";
-  }
-}
-
 async function doLogin(method) {
-  authMenu.hidden = true;
+  closeSignin();
   try {
     if (method === "pubky") {
       const p = await plib();
@@ -367,7 +374,7 @@ function renderAuth() {
     }
   } else {
     box.innerHTML = `<button type="button" class="tw-syncbtn ghost">Sign in to sync across devices</button>`;
-    box.querySelector("button").addEventListener("click", () => { const r = chip?.getBoundingClientRect(); authMenu.hidden = false; if (r) { authMenu.style.top = r.bottom + 8 + "px"; authMenu.style.right = Math.max(8, innerWidth - r.right) + "px"; } });
+    box.querySelector("button").addEventListener("click", openSignin);
   }
 }
 
@@ -420,13 +427,8 @@ function toast(msg, warn) {
 
 // ── wiring ────────────────────────────────────────────────────────────────
 export async function init() {
-  // Auth chip works on every page.
-  if (chip) {
-    chip.addEventListener("click", (e) => { e.stopPropagation(); toggleAuthMenu(); });
-    authMenu.querySelectorAll("button[data-m]").forEach((b) =>
-      b.addEventListener("click", () => doLogin(b.dataset.m)));
-    document.addEventListener("click", (e) => { if (!authMenu.contains(e.target) && e.target !== chip) authMenu.hidden = true; });
-  }
+  // Auth chip works on every page — opens the sign-in chooser, or signs out.
+  if (chip) chip.addEventListener("click", openSignin);
   // Only pull in a sync bundle if there's a session to restore; anonymous readers
   // get the highlighter with no heavy download.
   const saved = storedAuth();

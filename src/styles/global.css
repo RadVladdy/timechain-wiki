@@ -256,11 +256,13 @@ body.tw-selecting .tw-fab{visibility:hidden}
 .tw-mini.danger:hover{border-color:#c2564a;color:#c2564a}
 .tw-p-foot{padding:12px 18px;border-top:1px solid var(--line-soft);color:var(--ink-faint);font-size:11.5px;line-height:1.5}
 
-.tw-authmenu{position:fixed;z-index:95;background:var(--raise);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:6px;width:250px;animation:pop .12s ease}
-.tw-authmenu button{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;text-align:left;background:none;border:0;border-radius:8px;padding:9px 11px;color:var(--ink);font-family:var(--sans);font-size:13.5px;font-weight:600;cursor:pointer}
-.tw-authmenu button span{font-weight:400;font-size:11.5px;color:var(--ink-faint)}
-.tw-authmenu button:hover:not([disabled]){background:var(--surface)}
-.tw-authmenu button[disabled]{opacity:.5;cursor:default}
+/* sign-in chooser (centered modal) */
+.tw-signin .tw-dialog-panel{max-width:400px}
+.tw-signin-opts{display:flex;flex-direction:column;gap:9px}
+.tw-signin-opts button{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:11px;padding:12px 14px;color:var(--ink);font-family:var(--sans);cursor:pointer;transition:.15s}
+.tw-signin-opts button:hover{border-color:var(--brass)}
+.tw-signin-opts b{font-size:14px;font-weight:600}
+.tw-signin-opts span{font-size:12px;color:var(--ink-faint)}
 .chip .dot.on{background:var(--brass);box-shadow:0 0 0 3px color-mix(in srgb,var(--brass) 22%,transparent)}
 .tw-signed .dot.on{width:7px;height:7px;border-radius:50%;background:var(--brass)}
 
