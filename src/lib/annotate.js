@@ -147,6 +147,18 @@ function updateFab() {
   fab.querySelector(".tw-fab-n").textContent = n > 0 ? n : "";
   panel.querySelector(".tw-count").textContent = n;
 }
+// Hang the FAB at the reading column's lower-right corner — over the text itself,
+// clear of the "On this page" rail. The column's right edge shifts with the grid's
+// gap/rail/padding clamps, so measure it rather than guess in CSS. Below the
+// two-column breakpoint (rail hidden) fall back to the CSS corner default.
+function positionFab() {
+  if (root && window.innerWidth > 900) {
+    const r = root.getBoundingClientRect();
+    fab.style.right = Math.max(14, Math.round(window.innerWidth - r.right)) + "px";
+  } else {
+    fab.style.right = "";
+  }
+}
 
 const dirtyNostr = new Set(); // Nostr highlights whose note changed but isn't re-published yet
 
@@ -576,6 +588,7 @@ export async function init() {
   list = store.all();
   paint();
   updateFab();
+  positionFab();
 
   fab.addEventListener("click", () => (panel.hidden ? openPanel() : closePanel()));
   panel.querySelector(".tw-x").addEventListener("click", (e) => { e.stopPropagation(); closePanel(); });
@@ -606,7 +619,7 @@ export async function init() {
     if (h) { openPanel(); scrollTo(h.id); }
   });
 
-  window.addEventListener("resize", debounce(() => paint(), 150));
+  window.addEventListener("resize", debounce(() => { paint(); positionFab(); }, 150));
 
   // If a session restored, pull this page's highlights from the sync backend.
   if (user) syncRemote();
