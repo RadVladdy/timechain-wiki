@@ -13,11 +13,12 @@ function count(area) {
   return all.filter((e) => e.data.type === "note" && e.data.area === area).length;
 }
 ---
-<Base title="Timechain Wiki">
-  <header class="hero"><div class="wrap">
+<Base title="TimechainWiki">
+  <header class="hero"><div class="wrap hero-grid">
+    <div class="hero-text">
     <div class="kicker"><span class="eyebrow">The Bitcoin encyclopedia</span><span class="rule"></span><span class="eyebrow">{all.length} entries</span></div>
     <h1>A structured reference for Bitcoin —<br />walk the <em>argument</em>, don't just search it.</h1>
-    <p class="lede">Timechain Wiki renders a painstakingly organized knowledge base as a public encyclopedia. Every entry sits inside a deliberate hierarchy — <strong>seven movements, sixteen sections, all cross-linked</strong> — so you can follow the reasoning, not just look up a term.</p>
+    <p class="lede">TimechainWiki renders a painstakingly organized knowledge base as a public encyclopedia. Every entry sits inside a deliberate hierarchy — <strong>seven movements, sixteen sections, all cross-linked</strong> — so you can follow the reasoning, not just look up a term.</p>
 
     <button class="searchbar" id="hero-search" type="button">
       <svg width="17" height="17" viewBox="0 0 24 24" fill="none" style="color:var(--brass)"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><path d="M16.5 16.5 21 21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
@@ -30,6 +31,11 @@ function count(area) {
       <div class="stat"><b>{stats.thinkers}</b><span>Thinkers</span></div>
       <div class="stat"><b>{stats.sources}</b><span>Sources</span></div>
       <div class="stat"><b>{stats.maps}</b><span>Section maps</span></div>
+    </div>
+    </div>
+    <div class="hero-logo">
+      <img class="l" src="/logo-light.png" alt="TimechainWiki" />
+      <img class="d" src="/logo-dark.png" alt="TimechainWiki" />
     </div>
   </div></header>
 

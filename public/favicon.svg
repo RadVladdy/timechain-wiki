@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <rect width="32" height="32" rx="7" fill="#16232a"/>
+  <!-- open book base -->
+  <path d="M6 23.5 C10 21.2 13.6 21.2 16 23.2 C18.4 21.2 22 21.2 26 23.5 L26 26.6 C22 24.3 18.4 24.3 16 26.3 C13.6 24.3 10 24.3 6 26.6 Z" fill="#5f8b91"/>
+  <!-- bitcoin B -->
+  <g fill="#d8a850">
+    <rect x="11.3" y="6.5" width="3.4" height="15" rx="1"/>
+    <path d="M13.4 6.5 h4 a3.7 3.4 0 0 1 0 6.8 h-4 z"/>
+    <path d="M13.4 13.3 h4.7 a3.7 3.6 0 0 1 0 7.2 h-4.7 z"/>
+    <rect x="12.2" y="3.8" width="2" height="3.6" rx="0.9"/>
+    <rect x="15.1" y="3.8" width="2" height="3.6" rx="0.9"/>
+    <rect x="12.2" y="20.2" width="2" height="3.6" rx="0.9"/>
+    <rect x="15.1" y="20.2" width="2" height="3.6" rx="0.9"/>
+  </g>
+  <!-- counters -->
+  <g fill="#16232a">
+    <rect x="14.9" y="8.4" width="3.1" height="3" rx="0.8"/>
+    <rect x="14.9" y="15.3" width="3.8" height="3.3" rx="0.8"/>
+  </g>
+</svg>

@@ -1,7 +1,7 @@
 ---
 import "../styles/global.css";
-const { title = "Timechain Wiki", description = "The Bitcoin encyclopedia — a structured, non-tribal reference." } = Astro.props;
-const full = title === "Timechain Wiki" ? title : `${title} — Timechain Wiki`;
+const { title = "TimechainWiki", description = "The Bitcoin encyclopedia — a structured, non-tribal reference." } = Astro.props;
+const full = title === "TimechainWiki" ? title : `${title} — TimechainWiki`;
 ---
 <!doctype html>
 <html lang="en">
@@ -10,6 +10,7 @@ const full = title === "Timechain Wiki" ? title : `${title} — Timechain Wiki`;
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{full}</title>
     <meta name="description" content={description} />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <script is:inline>
       (() => {
         try {
@@ -22,8 +23,9 @@ const full = title === "Timechain Wiki" ? title : `${title} — Timechain Wiki`;
   <body>
     <div class="topbar"><div class="wrap"><div class="row">
       <a class="brand" href="/">
-        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="2.5" y="8" width="7" height="7" rx="1.4" stroke="var(--brass)" stroke-width="1.7"/><rect x="14.5" y="9" width="7" height="7" rx="1.4" stroke="var(--brass)" stroke-width="1.7"/><path d="M9.5 11.5h5" stroke="var(--brass)" stroke-width="1.7"/></svg>
-        <span class="t">Timechain</span><span class="w">Wiki</span>
+        <img class="brandlogo l" src="/logo-light.png" alt="" width="30" height="30" />
+        <img class="brandlogo d" src="/logo-dark.png" alt="" width="30" height="30" />
+        <span class="wm"><span class="t">Timechain</span><span class="w">Wiki</span></span>
       </a>
       <div class="spacer"></div>
       <button class="chip srch" type="button" id="open-search" aria-label="Search the wiki">
@@ -41,9 +43,9 @@ const full = title === "Timechain Wiki" ? title : `${title} — Timechain Wiki`;
     </main>
 
     <footer class="foot"><div class="wrap">
-      <div class="disc"><b style="color:var(--brass)">Phase-1 preview</b> — the Timechain Wiki foundation: the Bitcoin knowledge base rendered from source, internal editor notes removed, the archival design applied. Structured navigation, search, and Nostr/Pubky annotation land in later phases.</div>
+      <div class="disc"><b style="color:var(--brass)">Preview</b> — a Bitcoin knowledge base rendered from source as a public encyclopedia: structure-forward navigation, full-text search, and reader annotation via Nostr &amp; Pubky. Brand &amp; content still in progress.</div>
       <div class="fr">
-        <span>Timechain Wiki · built on the media-neutral Bitcoin knowledge base</span>
+        <span>TimechainWiki · built on the media-neutral Bitcoin knowledge base</span>
         <span class="mono">rendered from source · CC-BY where the source allows</span>
       </div>
     </div></footer>
