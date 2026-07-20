@@ -62,7 +62,13 @@ export async function loginBunker(connectString) {
   const bp = await parseBunkerInput(connectString.trim());
   if (!bp) throw new Error("bad-bunker-string");
   const local = generateSecretKey();
-  const bunker = new BunkerSigner(local, bp, { pool });
+  // fromBunker is the current factory — the constructor is private (calling `new`
+  // left `bp` unset → "this.bp is undefined"). onauth opens the approval URL some
+  // signers hand back (Amber usually approves via its own prompt instead).
+  const bunker = BunkerSigner.fromBunker(local, bp, {
+    pool,
+    onauth: (url) => { try { window.open(url, "_blank", "noopener"); } catch {} },
+  });
   await bunker.connect();
   const pubkey = await bunker.getPublicKey();
   signer = { pubkey, signEvent: (e) => bunker.signEvent(e) };
