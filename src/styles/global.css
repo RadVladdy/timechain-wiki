@@ -56,7 +56,8 @@ a{color:inherit}
 .chip{display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:12px;padding:6px 11px;border:1px solid var(--line);border-radius:999px;color:var(--ink-soft);background:var(--surface);cursor:pointer;transition:.2s}
 .chip:hover{border-color:var(--brass);color:var(--ink)}
 .chip .dot{width:7px;height:7px;border-radius:50%;background:var(--sage);box-shadow:0 0 0 3px color-mix(in srgb,var(--sage) 22%,transparent)}
-.iconbtn{width:36px;height:36px;display:grid;place-items:center;border:1px solid var(--line);border-radius:9px;background:var(--surface);color:var(--ink-soft);cursor:pointer;font-size:15px;transition:.2s}
+.iconbtn{width:38px;height:38px;display:grid;place-items:center;border:1px solid var(--line);border-radius:50%;background:var(--surface);color:var(--ink-soft);cursor:pointer;transition:.2s;flex:none}
+.iconbtn svg{width:17px;height:17px}
 .iconbtn:hover{border-color:var(--brass);color:var(--ink)}
 
 /* hero */
@@ -77,12 +78,19 @@ a{color:inherit}
 /* topbar search chip */
 .chip.srch{gap:8px}
 .chip.srch .kbd{font-family:var(--mono);font-size:10px;border:1px solid var(--line);border-radius:5px;padding:1px 5px;color:var(--ink-faint)}
-@media (max-width:640px){.chip.srch .srch-t,.chip.srch .kbd{display:none}.chip.srch{padding:8px}#signin .dot{margin:0}#signin{font-size:0;gap:0;padding:8px}
-/* signed in on mobile: a clean round avatar button (details in the account menu on tap) */
-#signin.tw-in{padding:4px;gap:0}
-#signin.tw-in .tw-chip-label{display:none}
-#signin.tw-in .tw-chip-av{width:26px;height:26px}
-#signin.tw-in .tw-chip-av--i{font-size:13px}}
+/* mobile top bar: search · account · theme as one matching set of 38px circles */
+@media (max-width:640px){
+  .topbar .row{gap:10px}
+  .chip.srch .srch-t,.chip.srch .kbd{display:none}
+  .chip.srch{width:38px;height:38px;padding:0;justify-content:center;border-radius:50%}
+  #signin .dot{margin:0}
+  #signin{width:38px;height:38px;font-size:0;gap:0;padding:0;justify-content:center;border-radius:50%}
+  /* signed in: the profile picture fills the whole circle */
+  #signin.tw-in{padding:0;overflow:hidden}
+  #signin.tw-in .tw-chip-label{display:none}
+  #signin.tw-in .tw-chip-av{width:100%;height:100%;border:0;border-radius:50%}
+  #signin.tw-in .tw-chip-av--i{font-size:15px}
+}
 
 /* ── ⌘K search modal ── */
 .modal{position:fixed;inset:0;z-index:80;display:flex;align-items:flex-start;justify-content:center;padding:12vh 18px 18px}
