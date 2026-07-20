@@ -177,7 +177,22 @@ a{color:inherit}
 .node:hover .arw{transform:translateX(3px);color:var(--orange)}
 
 /* article */
-.article{padding:clamp(30px,5vw,56px) 0 80px;max-width:760px}
+.article{padding:clamp(30px,5vw,56px) 0 90px}
+.art-grid{display:grid;grid-template-columns:minmax(0,1fr) 216px;gap:clamp(28px,5vw,58px);align-items:start}
+.art-grid.no-rail{grid-template-columns:minmax(0,1fr)}
+.art-main{min-width:0;width:100%;max-width:730px;margin:0 auto}
+/* sticky "On this page" rail */
+.art-rail{position:sticky;top:78px;align-self:start}
+.rail-in .toc-label{font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:11px;padding-left:14px}
+.toc{display:flex;flex-direction:column;border-left:1px solid var(--line-soft)}
+.toc a{font-family:var(--sans);font-size:12.5px;line-height:1.4;color:var(--ink-faint);text-decoration:none;padding:5px 0 5px 14px;border-left:2px solid transparent;margin-left:-1px;transition:color .15s,border-color .15s}
+.toc a:hover{color:var(--ink)}
+.toc a.on{color:var(--brass);border-left-color:var(--brass)}
+@media (max-width:900px){
+  .art-grid,.art-grid.no-rail{grid-template-columns:minmax(0,1fr)}
+  .art-rail{display:none}
+  .art-main{max-width:none}
+}
 .crumbs{font-family:var(--mono);font-size:11px;color:var(--ink-faint);letter-spacing:.04em;margin-bottom:18px}
 .crumbs a{text-decoration:none;color:var(--ink-faint)} .crumbs a:hover{color:var(--brass)}
 .crumbs b{color:var(--brass);font-weight:400}
@@ -190,8 +205,13 @@ a{color:inherit}
 .prose{font-family:var(--serif);font-size:17px;line-height:1.72;color:var(--ink)}
 .prose > *:first-child{margin-top:0}
 .prose p{margin:0 0 16px}
-.prose h2{font-family:var(--serif);font-size:24px;font-weight:600;letter-spacing:-.01em;margin:38px 0 14px;padding-bottom:8px;border-bottom:1px solid var(--line-soft)}
-.prose h3{font-family:var(--serif);font-size:19px;font-weight:600;margin:28px 0 10px}
+/* leading blockquote = the note's abstract → render as a standfirst, not a quote */
+.prose > blockquote:first-child{font-family:var(--serif);font-size:19px;line-height:1.62;color:var(--ink);background:none;border:0;border-radius:0;padding:0 0 22px;margin:0 0 30px;border-bottom:1px solid var(--line-soft)}
+.prose > blockquote:first-child p{margin:0}
+.prose > blockquote:first-child p + p{margin-top:12px}
+.prose > blockquote:first-child + hr{display:none}
+.prose h2{font-family:var(--serif);font-size:24px;font-weight:600;letter-spacing:-.01em;margin:40px 0 14px;padding-bottom:8px;border-bottom:1px solid var(--line-soft);scroll-margin-top:84px}
+.prose h3{font-family:var(--serif);font-size:19px;font-weight:600;margin:28px 0 10px;scroll-margin-top:84px}
 .prose ul,.prose ol{margin:0 0 16px;padding-left:24px}
 .prose li{margin:5px 0}
 .prose li::marker{color:var(--brass-dim)}
