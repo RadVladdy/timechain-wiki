@@ -1,0 +1,44 @@
+---
+import Base from "../../layouts/Base.astro";
+---
+<Base title="What is Pubky?" description="Pubky in plain terms — own your identity and your data with a key that's yours, and sync your TimechainWiki highlights across devices.">
+  <div class="wrap learn">
+    <a class="learn-back" href="/">← TimechainWiki</a>
+    <div class="lead">
+      <div class="kicker"><span class="eyebrow">Learn</span><span class="rule"></span><span class="eyebrow">Sync your highlights</span></div>
+      <h1>What is <span class="accent">Pubky</span>?</h1>
+      <p class="lede">Pubky lets you own your identity and your data online with a key that's <strong>yours</strong> — no account with any company. On TimechainWiki it's one of two ways to sync your highlights and notes across your devices.</p>
+    </div>
+
+    <div class="learn-body">
+      <section>
+        <h2>The idea</h2>
+        <p>Instead of a username and password held by a company, your identity <strong>is a key</strong> — a bit like a username nobody can take away or lock you out of. Your data lives on a <strong>homeserver</strong>: a small personal server you control, or a hosted one that you can pack up and move at any time.</p>
+        <p>Apps ask your permission to read or write, and you approve from your phone. It's built by <strong>Synonym</strong>, the team behind the Bitkit wallet — the same self-custody idea, applied to your online identity.</p>
+      </section>
+
+      <section>
+        <h2>How it works here</h2>
+        <p>When you sign in with Pubky and highlight a passage, your highlight and note are saved to <strong>your own homeserver</strong> — under a folder for this site — not to us. We never see or store them. Open TimechainWiki on another device, sign in, and your highlights are right there.</p>
+      </section>
+
+      <section>
+        <h2>Get set up</h2>
+        <ol class="learn-steps">
+          <li>Install <b>Pubky Ring</b> on your phone (Android or iPhone). It holds your key and approves logins — think of it as a hardware key for the web.</li>
+          <li>Open it and <b>create your pubky</b> (your identity), then back it up. The app sets you up with a homeserver to store your data.</li>
+          <li>Come back here, click <b>Sign in</b>, and under Pubky choose <b>Approve in Pubky Ring</b>. On a computer you'll scan a QR code; on your phone the app opens directly.</li>
+          <li>Approve <b>read + write</b> for this site. That's it — your highlights now sync.</li>
+        </ol>
+      </section>
+
+      <div class="learn-callout"><p><strong>On your phone</strong>, "Approve in Pubky Ring" opens the app directly. <strong>On a computer</strong>, you scan the on-screen QR code with Pubky Ring to approve.</p></div>
+
+      <div class="learn-cta">
+        <a class="btn" href="https://pubky.org" target="_blank" rel="noopener">Get Pubky Ring →</a>
+        <a class="btn btn-ghost" href="https://pubky.org" target="_blank" rel="noopener">Learn more at pubky.org</a>
+        <button class="btn btn-ghost" type="button" onclick="document.getElementById('signin').click()">← Back to sign in</button>
+      </div>
+    </div>
+  </div>
+</Base>

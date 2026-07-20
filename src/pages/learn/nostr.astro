@@ -1,0 +1,45 @@
+---
+import Base from "../../layouts/Base.astro";
+---
+<Base title="What is Nostr?" description="Nostr in plain terms — an open protocol for identity and content that no company controls, and how to use it to sync your TimechainWiki highlights.">
+  <div class="wrap learn">
+    <a class="learn-back" href="/">← TimechainWiki</a>
+    <div class="lead">
+      <div class="kicker"><span class="eyebrow">Learn</span><span class="rule"></span><span class="eyebrow">Sync your highlights</span></div>
+      <h1>What is <span class="accent">Nostr</span>?</h1>
+      <p class="lede">Nostr is a simple, open protocol for identity and content that <strong>no company controls</strong>. On TimechainWiki it's one of two ways to sync your highlights and notes across your devices.</p>
+    </div>
+
+    <div class="learn-body">
+      <section>
+        <h2>The idea</h2>
+        <p>Nostr stands for "Notes and Other Stuff Transmitted by Relays." Your identity is a <strong>key</strong> — a public key (your <b>npub</b>) that others see, and a secret key (your <b>nsec</b>) that only you hold. There's no account to sign up for and no company that owns it.</p>
+        <p>Apps read and write your data to <strong>relays</strong> — servers anyone can run — so the same identity works across every Nostr app you ever use. Switch apps and you keep your identity, your follows, and your content.</p>
+      </section>
+
+      <section>
+        <h2>How it works here</h2>
+        <p>When you sign in and highlight a passage, it's published as a small Nostr event — a standard <strong>highlight</strong> — to relays, under your key. Open TimechainWiki on another device, sign in, and they read back onto the page. Because relays are public, treat these highlights as <strong>public</strong>. We store nothing ourselves.</p>
+      </section>
+
+      <section>
+        <h2>Get set up</h2>
+        <ol class="learn-steps">
+          <li>Pick a <b>signer</b> that holds your key for you: on Android, <b>Amber</b>; on a computer, the <b>Alby</b> or <b>nos2x</b> browser extension.</li>
+          <li>Open it and let it <b>create a key</b>. Back up your secret (<b>nsec</b>) somewhere safe — it's the only way back into your identity.</li>
+          <li>Come back here, click <b>Sign in</b>, and under Nostr choose <b>Browser extension</b> (on a computer) or <b>Amber / remote signer</b> (on your phone — in Amber tap Connect, copy the <code>bunker://</code> link, and paste it).</li>
+          <li>Approve — your highlights now sync.</li>
+        </ol>
+      </section>
+
+      <div class="learn-callout"><p><strong>Your secret key is your account.</strong> A signer app keeps it safe and approves logins for you, so you never paste your secret into a website — including this one.</p></div>
+
+      <div class="learn-cta">
+        <a class="btn" href="https://github.com/greenart7c3/Amber" target="_blank" rel="noopener">Get Amber (Android) →</a>
+        <a class="btn btn-ghost" href="https://getalby.com" target="_blank" rel="noopener">Get Alby (desktop)</a>
+        <a class="btn btn-ghost" href="https://nostr.com" target="_blank" rel="noopener">Learn more at nostr.com</a>
+        <button class="btn btn-ghost" type="button" onclick="document.getElementById('signin').click()">← Back to sign in</button>
+      </div>
+    </div>
+  </div>
+</Base>
