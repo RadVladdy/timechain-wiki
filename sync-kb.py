@@ -153,6 +153,13 @@ def parse_submoc(txt, slugs):
         title = h.group(1).strip()
         if is_meta_heading(title):
             continue
+        # Drop a redundant "Cluster N —" prefix for display: the section walk-down
+        # already numbers each cluster (01, 02…), so "Cluster 1 — The BIP process"
+        # reads cleaner as just "The BIP process". Done AFTER the meta check so the
+        # "the …" meta guard sees the original heading (a real "Cluster 1 — The BIP
+        # process" must survive). Anchored to the literal word so titles like
+        # "Era 1 — …" are left untouched.
+        title = re.sub(r"^cluster\s+\d+\s*[—–:-]\s*", "", title, flags=re.I).strip()
         seg = txt[h.end(): heads[i + 1].start() if i + 1 < len(heads) else len(txt)]
 
         entries, intro_lines, stop = [], [], False
