@@ -112,6 +112,27 @@ export async function remove(id, key) {
   try { await session.storage.delete(file(key, id)); } catch {}
 }
 
+const toPath = (u) => (u.startsWith("pubky://") ? u.replace(/^pubky:\/\/[^/]+/, "") : (u.startsWith("/pub/") ? u : null));
+
+// Resolve a pubky.app profile `image` value to a displayable URL. In pubky.app an
+// avatar is a two-step chain: profile.image → a /files/<id> record (JSON) whose
+// `src` points at the actual /blobs/<id> bytes, tagged with a content_type.
+async function resolveImage(img) {
+  if (!img || typeof img !== "string") return null;
+  if (/^(https?:|data:)/.test(img)) return img;
+  let path = toPath(img);
+  if (!path) return null;
+  let contentType = "";
+  try {
+    if (/\/files\//.test(path)) {
+      const rec = await session.storage.getJson(path);            // file record → blob
+      if (rec && rec.src) { contentType = rec.content_type || ""; path = toPath(rec.src) || path; }
+    }
+    const bytes = await session.storage.getBytes(path);
+    return URL.createObjectURL(new Blob([bytes], contentType ? { type: contentType } : undefined));
+  } catch { return null; }
+}
+
 // The reader's pubky.app profile (name + avatar), if they have one. Best-effort:
 // many Pubky Ring users have no pubky.app profile, so null is normal.
 export async function getProfile() {
@@ -119,18 +140,7 @@ export async function getProfile() {
   try {
     const prof = await session.storage.getJson("/pub/pubky.app/profile.json");
     if (!prof) return null;
-    let image = null;
-    const img = prof.image;
-    if (typeof img === "string" && img) {
-      if (/^https?:\/\//.test(img)) image = img;
-      else {
-        try {
-          const path = img.startsWith("pubky://") ? img.replace(/^pubky:\/\/[^/]+/, "") : (img.startsWith("/pub/") ? img : null);
-          if (path) { const bytes = await session.storage.getBytes(path); image = URL.createObjectURL(new Blob([bytes])); }
-        } catch {}
-      }
-    }
-    return { name: prof.name || null, image };
+    return { name: prof.name || null, image: await resolveImage(prof.image) };
   } catch { return null; }
 }
 
