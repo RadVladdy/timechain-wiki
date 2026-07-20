@@ -204,6 +204,13 @@ a.entry:hover .e-arw{transform:translateX(3px);color:var(--brass)}
 .tw-pop{position:fixed;z-index:90;animation:pop .12s ease}
 .tw-hlbtn{display:inline-flex;align-items:center;gap:7px;font-family:var(--sans);font-size:13px;font-weight:600;color:var(--ground);background:var(--brass);border:0;border-radius:9px;padding:8px 13px;cursor:pointer;box-shadow:var(--shadow)}
 .tw-hlbtn:hover{background:var(--brass-bright)}
+/* touch: dock as a centered bottom bar, clear of the OS selection toolbar. The
+   full-width flex container centers the button without a transform (which the
+   entrance animation would otherwise override); pointer-events pass through the
+   empty area so outside taps still dismiss. */
+.tw-pop--bar{left:0;right:0;top:auto!important;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:none;animation:none;display:flex;justify-content:center;pointer-events:none}
+.tw-pop--bar .tw-hlbtn{pointer-events:auto;padding:14px 26px;font-size:15px;border-radius:13px;box-shadow:0 10px 34px -10px rgba(0,0,0,.55)}
+body.tw-selecting .tw-fab{visibility:hidden}
 
 /* Always visible on article pages so highlights/notes are discoverable with or
    without an account; hidden on non-article pages via .tw-fab[hidden]. */

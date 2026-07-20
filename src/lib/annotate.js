@@ -47,9 +47,21 @@ pop.hidden = true;
 pop.innerHTML = `<button type="button" class="tw-hlbtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M4 20h16M6 16l9-9a2 2 0 0 1 3 0l0 0a2 2 0 0 1 0 3l-9 9H6v-3Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>Highlight</button>`;
 document.body.appendChild(pop);
 
-function hidePop() { pop.hidden = true; }
+function hidePop() { pop.hidden = true; pop.classList.remove("tw-pop--bar"); document.body.classList.remove("tw-selecting"); }
 function showPop(rect) {
   pop.hidden = false;
+  // On touch, the OS paints its own selection toolbar (Copy/Share/…) right where
+  // an anchored popover would sit and covers it. So dock ours as a bar at the
+  // bottom of the screen, clear of the OS toolbar; the body class hides the FAB
+  // while it shows so the two don't overlap.
+  if (coarsePointer()) {
+    pop.classList.add("tw-pop--bar");
+    pop.style.left = pop.style.top = "";
+    document.body.classList.add("tw-selecting");
+    return;
+  }
+  pop.classList.remove("tw-pop--bar");
+  document.body.classList.remove("tw-selecting");
   const pw = pop.offsetWidth || 108, ph = pop.offsetHeight || 38;
   let x = rect.left + rect.width / 2 - pw / 2;
   let y = rect.top - ph - 8;
