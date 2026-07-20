@@ -266,20 +266,20 @@ signinModal.innerHTML = `
     <p class="tw-dialog-d">Your highlights already save on this device. Sign in to sync them across your devices — your keys, your data, no account with us.</p>
 
     <div class="tw-signin-sect">
+      <div class="tw-signin-label">Nostr</div>
+      <div class="tw-signin-opts">
+        <button type="button" data-m="bunker"><b>Amber / remote signer</b><span>Paste a bunker:// string — mobile</span></button>
+        <button type="button" data-m="nip07"><b>Browser extension</b><span>Alby, nos2x — desktop</span></button>
+      </div>
+      <a class="tw-signin-what" href="/learn/nostr">New to Nostr? What it is + how to get set up →</a>
+    </div>
+
+    <div class="tw-signin-sect">
       <div class="tw-signin-label">Pubky</div>
       <div class="tw-signin-opts">
         <button type="button" data-m="pubky"><b>Approve in Pubky Ring</b><span>Scan a QR, or open the app on your phone</span></button>
       </div>
       <a class="tw-signin-what" href="/learn/pubky">New to Pubky? What it is + how to get set up →</a>
-    </div>
-
-    <div class="tw-signin-sect">
-      <div class="tw-signin-label">Nostr</div>
-      <div class="tw-signin-opts">
-        <button type="button" data-m="nip07"><b>Browser extension</b><span>Alby, nos2x — desktop</span></button>
-        <button type="button" data-m="bunker"><b>Amber / remote signer</b><span>Paste a bunker:// string — mobile</span></button>
-      </div>
-      <a class="tw-signin-what" href="/learn/nostr">New to Nostr? What it is + how to get set up →</a>
     </div>
     <div class="tw-dialog-actions"><button type="button" class="tw-dialog-cancel" data-siclose>Cancel</button></div>
   </div>`;
