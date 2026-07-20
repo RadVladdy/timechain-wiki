@@ -133,6 +133,24 @@ export async function deleteEvent(id) {
   await Promise.any(pool.publish(RELAYS, signed)).catch(() => {});
 }
 
+// The reader's Nostr profile (kind-0 metadata) — name + picture, best-effort.
+export async function fetchProfile(pubkey, ms = 2500) {
+  const events = await new Promise((resolve) => {
+    const found = [];
+    const sub = pool.subscribeMany(RELAYS, [{ kinds: [0], authors: [pubkey], limit: 1 }], {
+      onevent: (e) => found.push(e),
+      oneose: () => {},
+    });
+    setTimeout(() => { try { sub.close(); } catch {} resolve(found); }, ms);
+  });
+  if (!events.length) return null;
+  events.sort((a, b) => b.created_at - a.created_at);
+  try {
+    const m = JSON.parse(events[0].content);
+    return { name: m.display_name || m.name || null, image: m.picture || null };
+  } catch { return null; }
+}
+
 // Fetch this reader's highlights for one page. Resolves after a short window.
 export async function fetch(pubkey, path, ms = 2500) {
   const filter = { kinds: [9802], authors: [pubkey], "#r": [canonUrl(path)] };

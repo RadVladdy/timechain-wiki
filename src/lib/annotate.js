@@ -148,18 +148,39 @@ function updateFab() {
   panel.querySelector(".tw-count").textContent = n;
 }
 
+const dirtyNostr = new Set(); // Nostr highlights whose note changed but isn't re-published yet
+
 const saveNote = debounce(async (id, val) => {
   store.upsert({ id, note: val });
   list = store.all();
-  // If this highlight is synced to Pubky, an edited note re-writes the homeserver
-  // record (putJson overwrites). Nostr kind-9802 events are immutable, so a Nostr
-  // highlight's note edit stays local.
+  // Pubky: an edited note re-writes the homeserver record live (putJson overwrites
+  // the same path — cheap and idempotent). Nostr events are immutable, so we don't
+  // churn a new event per keystroke; the edit is re-published once, on blur.
   const hl = list.find((x) => x.id === id);
   if (hl && hl.source === "pubky" && isPubky()) {
     try { const p = await plib(); await p.publish(hl, p.pageKey(store.pageUrl())); }
     catch (e) { toast("Couldn't save the note to Pubky: " + (e.message || e), true); }
   }
 }, 500);
+
+// Nostr edit = publish a fresh kind-9802 with the new note and delete the old one
+// (kind-9802 is immutable). Runs on blur, only if the note actually changed.
+async function republishNostrIfDirty(id) {
+  if (!dirtyNostr.has(id)) return;
+  dirtyNostr.delete(id);
+  const hl = list.find((x) => x.id === id);
+  if (!hl || hl.source !== "nostr" || !user || isPubky()) return;
+  try {
+    const n = await nlib();
+    const newId = await n.publish(hl, store.pageUrl());
+    n.deleteEvent(id).catch(() => {});
+    store.remove(id);
+    store.upsert({ ...hl, id: newId });
+    if (activeId === id) activeId = newId;
+    list = store.all();
+    renderPanel(); paint();
+  } catch (e) { toast("Couldn't update the note on Nostr: " + (e.message || e), true); }
+}
 
 function renderPanel() {
   renderAuth();
@@ -182,7 +203,8 @@ function renderPanel() {
     ta.placeholder = "Add a note…";
     ta.value = h.note || "";
     ta.rows = 1;
-    ta.addEventListener("input", (e) => { autogrow(ta); saveNote(h.id, e.target.value); });
+    ta.addEventListener("input", (e) => { autogrow(ta); saveNote(h.id, e.target.value); if (h.source === "nostr") dirtyNostr.add(h.id); });
+    ta.addEventListener("blur", () => republishNostrIfDirty(h.id));
     item.appendChild(ta);
 
     const foot = el("div", "tw-item-foot");
@@ -287,15 +309,18 @@ async function openAccount() {
   av.style.backgroundImage = user.avatar ? `url("${user.avatar}")` : "";
   av.textContent = user.avatar ? "" : (user.name || userLabel() || "•").slice(0, 1).toUpperCase();
   accountModal.hidden = false;
-  if (isPubky() && user.name === undefined) loadProfile(); // fetch once, lazily
+  if (user.name === undefined) loadProfile(); // fetch once, lazily
 }
 
 function openSignin() { if (user) { openAccount(); return; } signinModal.hidden = false; }
 
-// Pull the reader's Pubky profile (name + avatar) and refresh the chip + menu.
+// Pull the reader's profile (name + avatar) from whichever backend they used —
+// Pubky's pubky.app profile or a Nostr kind-0 — and refresh the chip + menu.
 async function loadProfile() {
   try {
-    const prof = await (await plib()).getProfile();
+    const prof = isPubky()
+      ? await (await plib()).getProfile()
+      : await (await nlib()).fetchProfile(user.pubkey);
     user.name = prof?.name || null;
     user.avatar = prof?.image || null;
     renderChip();
@@ -427,6 +452,7 @@ async function doLogin(method) {
     }
     renderChip();
     renderAuth();
+    loadProfile();      // Nostr kind-0 name + picture, async
     await syncRemote();
     toast(`Signed in with ${isPubky() ? "Pubky" : "Nostr"} — your highlights will sync.`);
   } catch (e) {
@@ -516,9 +542,10 @@ export async function init() {
   if (saved) {
     user = saved;
     try {
-      if (saved.method === "pubky") { await (await plib()).restore(); loadProfile(); }
+      if (saved.method === "pubky") await (await plib()).restore();
       else (await nlib()).restore();
     } catch {}
+    loadProfile();
   }
   renderChip();
 
