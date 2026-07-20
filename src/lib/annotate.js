@@ -189,6 +189,46 @@ authMenu.innerHTML = `
   <button type="button" data-m="pubky" disabled>Pubky<span>Coming next</span></button>`;
 document.body.appendChild(authMenu);
 
+// A styled input dialog — replaces the browser's native prompt() so every popup
+// matches the site. askInput() resolves to the trimmed value or null (cancel).
+const dialog = el("div", "tw-dialog");
+dialog.hidden = true;
+dialog.innerHTML = `
+  <div class="tw-dialog-bg" data-cancel></div>
+  <div class="tw-dialog-panel" role="dialog" aria-modal="true">
+    <h3 class="tw-dialog-t"></h3>
+    <p class="tw-dialog-d"></p>
+    <input class="tw-dialog-in" type="text" autocomplete="off" spellcheck="false" />
+    <div class="tw-dialog-actions">
+      <button type="button" class="tw-dialog-cancel" data-cancel>Cancel</button>
+      <button type="button" class="tw-dialog-ok"></button>
+    </div>
+  </div>`;
+document.body.appendChild(dialog);
+let dialogResolve = null;
+function closeDialog(val) { dialog.hidden = true; const r = dialogResolve; dialogResolve = null; r && r(val); }
+{
+  const input = dialog.querySelector(".tw-dialog-in");
+  dialog.querySelector(".tw-dialog-ok").addEventListener("click", () => closeDialog(input.value.trim() || null));
+  dialog.querySelectorAll("[data-cancel]").forEach((e) => e.addEventListener("click", () => closeDialog(null)));
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); closeDialog(input.value.trim() || null); }
+    else if (e.key === "Escape") { e.preventDefault(); closeDialog(null); }
+  });
+}
+function askInput({ title, desc, placeholder = "", confirmText = "Confirm" }) {
+  return new Promise((resolve) => {
+    dialogResolve = resolve;
+    dialog.querySelector(".tw-dialog-t").textContent = title;
+    dialog.querySelector(".tw-dialog-d").textContent = desc;
+    dialog.querySelector(".tw-dialog-ok").textContent = confirmText;
+    const input = dialog.querySelector(".tw-dialog-in");
+    input.value = ""; input.placeholder = placeholder;
+    dialog.hidden = false;
+    requestAnimationFrame(() => input.focus());
+  });
+}
+
 function renderChip() {
   if (!chip) return;
   if (user) {
@@ -217,7 +257,12 @@ async function doLogin(method) {
   try {
     if (method === "nip07") user = await lib.loginNip07();
     else if (method === "bunker") {
-      const s = prompt("Paste your bunker:// connect string (from Amber → Connect):");
+      const s = await askInput({
+        title: "Connect a remote signer",
+        desc: "Paste the connect string from your signer app (in Amber: Connect → copy the bunker:// link).",
+        placeholder: "bunker://…",
+        confirmText: "Connect",
+      });
       if (!s) return;
       user = await lib.loginBunker(s);
     } else return;

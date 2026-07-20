@@ -257,6 +257,22 @@ a.entry:hover .e-arw{transform:translateX(3px);color:var(--brass)}
 .chip .dot.on{background:var(--brass);box-shadow:0 0 0 3px color-mix(in srgb,var(--brass) 22%,transparent)}
 .tw-signed .dot.on{width:7px;height:7px;border-radius:50%;background:var(--brass)}
 
+/* styled input dialog (replaces native prompt) */
+.tw-dialog{position:fixed;inset:0;z-index:96;display:flex;align-items:center;justify-content:center;padding:18px}
+.tw-dialog[hidden]{display:none}
+.tw-dialog-bg{position:absolute;inset:0;background:color-mix(in srgb,var(--ground) 72%,#000);backdrop-filter:blur(4px)}
+.tw-dialog-panel{position:relative;width:100%;max-width:440px;background:var(--raise);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);padding:22px;animation:pop .16s ease}
+.tw-dialog-t{font-family:var(--serif);font-size:20px;font-weight:600;letter-spacing:-.01em;margin-bottom:8px}
+.tw-dialog-d{color:var(--ink-soft);font-size:13.5px;line-height:1.55;margin-bottom:16px}
+.tw-dialog-in{width:100%;background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:11px 13px;color:var(--ink);font-family:var(--mono);font-size:13.5px;outline:none}
+.tw-dialog-in:focus{border-color:var(--brass)}
+.tw-dialog-in::placeholder{color:var(--ink-faint)}
+.tw-dialog-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}
+.tw-dialog-cancel{font-family:var(--sans);font-size:13.5px;background:none;border:1px solid var(--line);border-radius:9px;padding:9px 15px;color:var(--ink-soft);cursor:pointer;transition:.15s}
+.tw-dialog-cancel:hover{border-color:var(--ink-soft);color:var(--ink)}
+.tw-dialog-ok{font-family:var(--sans);font-size:13.5px;font-weight:600;background:var(--brass);border:0;border-radius:9px;padding:9px 16px;color:var(--ground);cursor:pointer}
+.tw-dialog-ok:hover{background:var(--brass-bright)}
+
 .tw-toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,20px);z-index:99;background:var(--raise);border:1px solid var(--line);border-left:3px solid var(--sage);border-radius:10px;padding:11px 16px;color:var(--ink);font-size:13.5px;max-width:min(440px,92vw);box-shadow:var(--shadow);opacity:0;pointer-events:none;transition:.22s}
 .tw-toast.show{opacity:1;transform:translate(-50%,0)}
 .tw-toast.warn{border-left-color:#c2564a}
