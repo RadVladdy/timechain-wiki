@@ -14,7 +14,7 @@ export const RELAYS = [
 ];
 // Profile (kind-0) lookups — include purplepag.es, the profile-metadata relay
 // that aggregates kind-0 across the network, so avatars resolve reliably.
-const PROFILE_RELAYS = ["wss://purplepag.es", "wss://relay.nostr.band", "wss://relay.damus.io", "wss://nos.lol"];
+const PROFILE_RELAYS = ["wss://purplepag.es", "wss://relay.nostr.band", "wss://relay.damus.io", "wss://nos.lol", "wss://relay.primal.net"];
 
 const toHex = (b) => Array.from(b).map((x) => x.toString(16).padStart(2, "0")).join("");
 const fromHex = (h) => new Uint8Array(h.match(/.{1,2}/g).map((x) => parseInt(x, 16)));
@@ -152,19 +152,17 @@ export async function deleteEvent(id) {
 }
 
 // The reader's Nostr profile (kind-0 metadata) — name + picture, best-effort.
-export async function fetchProfile(pubkey, ms = 2500) {
-  const events = await new Promise((resolve) => {
-    const found = [];
-    const sub = pool.subscribeMany(PROFILE_RELAYS, [{ kinds: [0], authors: [pubkey], limit: 1 }], {
-      onevent: (e) => found.push(e),
-      oneose: () => {},
-    });
-    setTimeout(() => { try { sub.close(); } catch {} resolve(found); }, ms);
-  });
-  if (!events.length) return null;
-  events.sort((a, b) => b.created_at - a.created_at);
+// Uses querySync (collects until EOSE) with an 8s ceiling — the pattern that
+// works on bitcoinkeys.guide; the old subscribe + 2.5s cutoff closed too early.
+export async function fetchProfile(pubkey, ms = 8000) {
   try {
-    const m = JSON.parse(events[0].content);
+    const events = await Promise.race([
+      pool.querySync(PROFILE_RELAYS, { kinds: [0], authors: [pubkey] }),
+      new Promise((_, rej) => setTimeout(() => rej(new Error("profile-timeout")), ms)),
+    ]);
+    if (!events || !events.length) return null;
+    const newest = events.reduce((a, b) => (b.created_at > a.created_at ? b : a));
+    const m = JSON.parse(newest.content || "{}");
     return { name: m.display_name || m.name || null, image: m.picture || null };
   } catch { return null; }
 }
