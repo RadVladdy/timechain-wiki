@@ -328,6 +328,12 @@ body.tw-selecting .tw-fab{visibility:hidden}
 .tw-mini{font-family:var(--sans);font-size:11.5px;background:none;border:1px solid var(--line);border-radius:6px;padding:4px 9px;color:var(--ink-soft);cursor:pointer;transition:.15s}
 .tw-mini:hover{border-color:var(--brass);color:var(--ink)}
 .tw-mini.danger:hover{border-color:#c2564a;color:#c2564a}
+.tw-mini.accent{border-color:color-mix(in srgb,var(--orange) 45%,transparent);color:var(--orange)}
+.tw-mini.accent:hover{border-color:var(--orange)}
+.tw-mini.accent:disabled{opacity:.55;cursor:default}
+.tw-badge.s{color:var(--orange);border-color:color-mix(in srgb,var(--orange) 40%,transparent)}
+.tw-confirm .tw-cf-quote{cursor:default;margin-bottom:10px}
+.tw-confirm .tw-cf-note{font-size:13.5px;color:var(--ink-soft);line-height:1.55;margin:0 0 6px;white-space:pre-wrap;max-height:9em;overflow-y:auto}
 .tw-p-foot{padding:12px 18px;border-top:1px solid var(--line-soft);color:var(--ink-faint);font-size:11.5px;line-height:1.5}
 
 /* sign-in chooser (centered modal) */

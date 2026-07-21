@@ -132,6 +132,36 @@ export async function publish(hl, path) {
   return signed.id;
 }
 
+// The wiki's Suggestions inbox identity — reader edit-suggestions are sent as
+// public addressed kind-1 events p-tagging this pubkey (receive-only; a box
+// poller reads the feed and stages suggestions for editorial review).
+export const SUGGESTIONS_PUBKEY = "87c1f3e383550571b2cb5283e6352d2d5ddc7abf97415f94f9f26dda6c92f0fa";
+
+// Build + sign + publish a reader suggestion (public kind-1, signed by the
+// reader, addressed to the Suggestions inbox). Returns the event id.
+export async function publishSuggestion({ exact, text, path }) {
+  if (!signer) {
+    const u = storedUser();
+    if (u?.method === "nip46") await reconnectBunker(u);
+    if (!signer) throw new Error("not-signed-in");
+  }
+  const tmpl = {
+    kind: 1,
+    created_at: Math.floor(Date.now() / 1000),
+    content: `Suggested edit for ${canonUrl(path)}\n\nPassage:\n"${exact}"\n\nSuggestion:\n${text}`,
+    tags: [
+      ["p", SUGGESTIONS_PUBKEY],
+      ["r", canonUrl(path)],
+      ["t", "timechain-wiki-suggestion"],
+      ["alt", "Reader edit-suggestion for Timechain Wiki"],
+    ],
+    pubkey: signer.pubkey,
+  };
+  const signed = await signer.signEvent(tmpl);
+  await Promise.any(pool.publish(RELAYS, signed)).catch(() => {});
+  return signed.id;
+}
+
 // Request deletion of a highlight event (NIP-09 kind-5). Best-effort — relays
 // may or may not honor it; the highlight is removed locally regardless.
 export async function deleteEvent(id) {

@@ -130,7 +130,7 @@ panel.innerHTML = `
   </div>
   <div class="tw-auth"></div>
   <div class="tw-list"></div>
-  <div class="tw-p-foot">Highlights are saved on this device. Sign in with Nostr to sync them across devices.</div>`;
+  <div class="tw-p-foot">Signed out, highlights and notes stay on this device — private. Signed in, they publish to your own Nostr or Pubky account as you make them — publicly, like posts. "Suggest edit" sends a note to the wiki's editors, also public.</div>`;
 document.body.appendChild(panel);
 
 const fab = el("button", "tw-fab");
@@ -221,14 +221,28 @@ function renderPanel() {
 
     const foot = el("div", "tw-item-foot");
     const synced = h.source === "nostr" || h.source === "pubky";
-    const badgeText = h.source === "nostr" ? "Nostr" : h.source === "pubky" ? "Pubky" : "On this device";
+    const badgeText = h.source === "nostr" ? "Public · Nostr" : h.source === "pubky" ? "Public · Pubky" : "This device only";
     const badge = el("span", "tw-badge " + (synced ? "n" : "l"), badgeText);
+    badge.title = synced
+      ? "Published to your own account — publicly visible"
+      : "Saved only in this browser — private";
     foot.appendChild(badge);
+    if (h.suggestedAt) {
+      const sb = el("span", "tw-badge s", "Suggested ✓");
+      sb.title = "Sent to the wiki's editors";
+      foot.appendChild(sb);
+    }
     const spacer = el("span", "tw-sp"); foot.appendChild(spacer);
+
+    const sug = el("button", "tw-mini accent", h.suggestedAt ? "Sent" : "Suggest edit");
+    sug.title = "Send this passage + your note to the wiki's editors (public, signed as you)";
+    if (h.suggestedAt) sug.disabled = true;
+    else sug.addEventListener("click", () => suggestOne(h.id, sug));
+    foot.appendChild(sug);
 
     if (user && h.source === "local") {
       const pub = el("button", "tw-mini", "Publish");
-      pub.title = `Publish to ${isPubky() ? "Pubky" : "Nostr"}`;
+      pub.title = `Publish publicly to your own ${isPubky() ? "Pubky" : "Nostr"} account`;
       pub.addEventListener("click", () => publishOne(h.id, pub));
       foot.appendChild(pub);
     }
@@ -275,7 +289,7 @@ signinModal.innerHTML = `
   <div class="tw-dialog-bg" data-siclose></div>
   <div class="tw-dialog-panel" role="dialog" aria-modal="true">
     <h3 class="tw-dialog-t">Sign in to sync</h3>
-    <p class="tw-dialog-d">Your highlights already save on this device. Sign in to sync them across your devices — your keys, your data, no account with us.</p>
+    <p class="tw-dialog-d">Your highlights already save on this device, privately. Sign in to sync them across your devices — your keys, your data, no account with us. Synced highlights live on your own public account, like posts.</p>
 
     <div class="tw-signin-sect">
       <div class="tw-signin-label">Nostr</div>
@@ -328,7 +342,7 @@ async function openAccount() {
   const how = isPubky() ? "Pubky" : user.method === "nip46" ? "Nostr · remote signer" : "Nostr · browser extension";
   accountModal.querySelector(".tw-acc-name").textContent = user.name || userLabel();
   accountModal.querySelector(".tw-acc-id").textContent = isPubky() ? user.pubky : (user.npub || "");
-  accountModal.querySelector(".tw-acc-sub").textContent = `Signed in with ${how}. Your highlights sync to your account; they also stay on this device.`;
+  accountModal.querySelector(".tw-acc-sub").textContent = `Signed in with ${how}. New highlights publish to your account as you make them — publicly. They also stay on this device.`;
   const av = accountModal.querySelector(".tw-acc-av");
   av.style.backgroundImage = user.avatar ? `url("${user.avatar}")` : "";
   av.textContent = user.avatar ? "" : (user.name || userLabel() || "•").slice(0, 1).toUpperCase();
@@ -390,6 +404,83 @@ function askInput({ title, desc, placeholder = "", confirmText = "Confirm" }) {
     dialog.hidden = false;
     requestAnimationFrame(() => input.focus());
   });
+}
+
+// Confirm dialog for the suggestion send — states plainly that the send is
+// public and signed, and previews exactly what will be sent.
+const confirmModal = el("div", "tw-dialog tw-confirm");
+confirmModal.hidden = true;
+confirmModal.innerHTML = `
+  <div class="tw-dialog-bg" data-cfcancel></div>
+  <div class="tw-dialog-panel" role="dialog" aria-modal="true">
+    <h3 class="tw-dialog-t"></h3>
+    <p class="tw-dialog-d"></p>
+    <blockquote class="tw-quote tw-cf-quote"></blockquote>
+    <p class="tw-cf-note"></p>
+    <div class="tw-dialog-actions">
+      <button type="button" class="tw-dialog-cancel" data-cfcancel>Cancel</button>
+      <button type="button" class="tw-dialog-ok"></button>
+    </div>
+  </div>`;
+document.body.appendChild(confirmModal);
+let confirmResolve = null;
+function closeConfirm(val) { confirmModal.hidden = true; const r = confirmResolve; confirmResolve = null; r && r(val); }
+confirmModal.querySelectorAll("[data-cfcancel]").forEach((e) => e.addEventListener("click", () => closeConfirm(false)));
+confirmModal.querySelector(".tw-dialog-ok").addEventListener("click", () => closeConfirm(true));
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !confirmModal.hidden) closeConfirm(false); });
+function askConfirm({ title, desc, quote, note, confirmText }) {
+  return new Promise((resolve) => {
+    confirmResolve = resolve;
+    confirmModal.querySelector(".tw-dialog-t").textContent = title;
+    confirmModal.querySelector(".tw-dialog-d").textContent = desc;
+    confirmModal.querySelector(".tw-cf-quote").textContent = quote || "";
+    confirmModal.querySelector(".tw-cf-note").textContent = note || "";
+    confirmModal.querySelector(".tw-dialog-ok").textContent = confirmText;
+    confirmModal.hidden = false;
+  });
+}
+
+// Send a highlight + its note to the wiki's Suggestions inbox — a public Nostr
+// note signed by the reader (Nostr-only: Pubky has no way to receive messages).
+async function suggestOne(id, btn) {
+  const h = list.find((x) => x.id === id);
+  if (!h) return;
+  const text = (h.note || "").trim();
+  if (!text) {
+    toast("Write your suggestion in the note box first, then hit Suggest edit.", true);
+    setActive(id);
+    const ta = $(`.tw-item[data-id="${id}"] textarea`);
+    ta && ta.focus();
+    return;
+  }
+  if (!user) {
+    toast("Suggestions are sent publicly, signed by you — sign in with Nostr first.");
+    openSignin();
+    return;
+  }
+  if (isPubky()) {
+    toast("Suggestions travel over Nostr, and Pubky can't receive messages yet — sign in with a Nostr method to send one.", true);
+    return;
+  }
+  const ok = await askConfirm({
+    title: "Send this to the wiki?",
+    desc: "Your note and the highlighted passage go to the wiki's editors as a public Nostr note, signed as you — not private. Every suggestion is reviewed by hand before anything changes.",
+    quote: h.anchor.exact,
+    note: text,
+    confirmText: "Send suggestion",
+  });
+  if (!ok) return;
+  btn.disabled = true; btn.textContent = "Sending…";
+  try {
+    const evId = await (await nlib()).publishSuggestion({ exact: h.anchor.exact, text, path: store.pageUrl() });
+    store.upsert({ id, suggestedAt: Date.now(), suggestedEvent: evId });
+    list = store.all();
+    renderPanel();
+    toast("Suggestion sent — thank you. The editors read every one.");
+  } catch (e) {
+    toast("Couldn't send the suggestion: " + (e.message || e), true);
+    btn.disabled = false; btn.textContent = "Suggest edit";
+  }
 }
 
 // Pubky sign-in dialog: a QR to scan with Pubky Ring (desktop) + a deep link to
@@ -499,7 +590,7 @@ function renderAuth() {
     const unpublished = list.filter((h) => h.source === "local").length;
     box.innerHTML = `<div class="tw-signed"><span class="dot on"></span>Signed in · <b>${userLabel()}</b></div>`;
     if (unpublished > 0) {
-      const b = el("button", "tw-syncbtn", `Publish ${unpublished} to ${isPubky() ? "Pubky" : "Nostr"}`);
+      const b = el("button", "tw-syncbtn", `Publish ${unpublished} to ${isPubky() ? "Pubky" : "Nostr"} (public)`);
       b.addEventListener("click", () => publishAll(b));
       box.appendChild(b);
     }
