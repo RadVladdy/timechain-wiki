@@ -130,7 +130,7 @@ panel.innerHTML = `
   </div>
   <div class="tw-auth"></div>
   <div class="tw-list"></div>
-  <div class="tw-p-foot">Signed out, highlights and notes stay on this device — private. Signed in, they publish to your own Nostr or Pubky account as you make them — publicly, like posts. "Suggest edit" sends a note to the wiki's editors, also public.</div>`;
+  <div class="tw-p-foot">Signed out, highlights and notes stay on this device — private. Signed in, they publish to your own Nostr or Pubky account as you make them — publicly, like posts. "Suggest" sends a note to the wiki's editors, also public.</div>`;
 document.body.appendChild(panel);
 
 const fab = el("button", "tw-fab");
@@ -220,22 +220,24 @@ function renderPanel() {
     item.appendChild(ta);
 
     const foot = el("div", "tw-item-foot");
+    // Status is plain text with a dot — deliberately not pill/button-shaped, so
+    // it can't be mistaken for an action. Saving is automatic; this just states
+    // where the highlight lives right now.
     const synced = h.source === "nostr" || h.source === "pubky";
-    const badgeText = h.source === "nostr" ? "Public · Nostr" : h.source === "pubky" ? "Public · Pubky" : "This device only";
-    const badge = el("span", "tw-badge " + (synced ? "n" : "l"), badgeText);
-    badge.title = synced
-      ? "Published to your own account — publicly visible"
-      : "Saved only in this browser — private";
-    foot.appendChild(badge);
-    if (h.suggestedAt) {
-      const sb = el("span", "tw-badge s", "Suggested ✓");
-      sb.title = "Sent to the wiki's editors";
-      foot.appendChild(sb);
-    }
+    const statusText = h.source === "nostr" ? "Public on Nostr" : h.source === "pubky" ? "Public on Pubky" : "On this device";
+    const status = el("span", "tw-status " + (synced ? "pub" : "loc"));
+    status.appendChild(el("i", "tw-status-dot"));
+    status.appendChild(document.createTextNode(statusText));
+    status.title = synced
+      ? "Published to your own account — publicly visible. Saves automatically."
+      : "Saved only in this browser — private. Saves automatically.";
+    foot.appendChild(status);
     const spacer = el("span", "tw-sp"); foot.appendChild(spacer);
 
-    const sug = el("button", "tw-mini accent", h.suggestedAt ? "Sent" : "Suggest edit");
-    sug.title = "Send this passage + your note to the wiki's editors (public, signed as you)";
+    const sug = el("button", "tw-mini", h.suggestedAt ? "Sent ✓" : "Suggest");
+    sug.title = h.suggestedAt
+      ? "Sent to the wiki's editors"
+      : "Send this passage + your note to the wiki's editors (public, signed as you)";
     if (h.suggestedAt) sug.disabled = true;
     else sug.addEventListener("click", () => suggestOne(h.id, sug));
     foot.appendChild(sug);
@@ -447,7 +449,7 @@ async function suggestOne(id, btn) {
   if (!h) return;
   const text = (h.note || "").trim();
   if (!text) {
-    toast("Write your suggestion in the note box first, then hit Suggest edit.", true);
+    toast("Write your suggestion in the note box first, then hit Suggest.", true);
     setActive(id);
     const ta = $(`.tw-item[data-id="${id}"] textarea`);
     ta && ta.focus();
@@ -479,7 +481,7 @@ async function suggestOne(id, btn) {
     toast("Suggestion sent — thank you. The editors read every one.");
   } catch (e) {
     toast("Couldn't send the suggestion: " + (e.message || e), true);
-    btn.disabled = false; btn.textContent = "Suggest edit";
+    btn.disabled = false; btn.textContent = "Suggest";
   }
 }
 
