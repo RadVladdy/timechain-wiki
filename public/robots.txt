@@ -1,0 +1,54 @@
+# timechain.wiki — a public Bitcoin encyclopedia.
+# All crawlers are welcome, including AI agents and LLM training/retrieval bots.
+# Machine-readable index of the whole wiki: https://timechain.wiki/llms.txt
+# Full concatenated text: https://timechain.wiki/llms-full.txt
+# Every article is also available as raw markdown at /wiki/<slug>.md
+
+User-agent: *
+Allow: /
+
+# Explicit welcome for common AI crawlers (already covered by * — stated so
+# intent is unambiguous).
+User-agent: GPTBot
+Allow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Claude-User
+Allow: /
+
+User-agent: Claude-SearchBot
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Perplexity-User
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: Applebot-Extended
+Allow: /
+
+User-agent: CCBot
+Allow: /
+
+User-agent: Bytespider
+Allow: /
+
+User-agent: meta-externalagent
+Allow: /
+
+Sitemap: https://timechain.wiki/sitemap-index.xml

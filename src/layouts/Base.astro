@@ -1,7 +1,15 @@
 ---
 import "../styles/global.css";
-const { title = "TimechainWiki", description = "The Bitcoin encyclopedia — a structured, non-tribal reference." } = Astro.props;
+const {
+  title = "TimechainWiki",
+  description = "The Bitcoin encyclopedia — a structured, non-tribal reference.",
+  ogType = "website",
+  jsonLd = null,
+  mdAlternate = null,
+} = Astro.props;
 const full = title === "TimechainWiki" ? title : `${title} — TimechainWiki`;
+const canonical = new URL(Astro.url.pathname, Astro.site);
+const ogImage = new URL("/brand/banner.png", Astro.site);
 ---
 <!doctype html>
 <html lang="en">
@@ -10,6 +18,20 @@ const full = title === "TimechainWiki" ? title : `${title} — TimechainWiki`;
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{full}</title>
     <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <link rel="sitemap" href="/sitemap-index.xml" />
+    {mdAlternate && <link rel="alternate" type="text/markdown" href={mdAlternate} title="This page as markdown" />}
+    <meta property="og:site_name" content="TimechainWiki" />
+    <meta property="og:type" content={ogType} />
+    <meta property="og:title" content={full} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={ogImage} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={full} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImage} />
+    {jsonLd && <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />}
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <script is:inline>
       (() => {

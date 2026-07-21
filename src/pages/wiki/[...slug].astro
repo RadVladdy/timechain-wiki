@@ -44,8 +44,27 @@ const showToc = toc.length >= 3;
 const section = SECTIONS.find((s) => s.area && s.area === d.area);
 const tags = Array.isArray(d.tags) ? d.tags : d.tags ? [d.tags] : [];
 const meta = [d.type, d.area, d.level].filter(Boolean);
+
+const pageUrl = new URL(`/wiki/${entry.id}`, Astro.site).href;
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": isSection ? "CollectionPage" : "Article",
+  headline: title,
+  name: title,
+  url: pageUrl,
+  inLanguage: "en",
+  isPartOf: { "@type": "WebSite", name: "TimechainWiki", url: Astro.site?.href },
+  ...(section && !isSection ? { articleSection: section.title } : {}),
+  ...(tags.length ? { keywords: tags.map(String).join(", ") } : {}),
+};
 ---
-<Base title={title} description={`${title} — from the Bitcoin knowledge base.`}>
+<Base
+  title={title}
+  description={`${title} — from the Bitcoin knowledge base.`}
+  ogType={isSection ? "website" : "article"}
+  jsonLd={jsonLd}
+  mdAlternate={`/wiki/${entry.id}.md`}
+>
   {isSection ? (
     <SectionView
       title={title}

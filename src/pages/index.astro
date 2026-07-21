@@ -12,8 +12,17 @@ function count(area) {
   if (area === "education") return all.filter((e) => e.data.type === "source" && e.data.area === "education").length;
   return all.filter((e) => e.data.type === "note" && e.data.area === area).length;
 }
+
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  name: "TimechainWiki",
+  alternateName: "Timechain Wiki",
+  url: Astro.site?.href,
+  description: "The Bitcoin encyclopedia — a structured, non-tribal reference.",
+};
 ---
-<Base title="TimechainWiki">
+<Base title="TimechainWiki" jsonLd={jsonLd}>
   <header class="hero"><div class="wrap hero-grid">
     <div class="hero-text">
     <div class="kicker"><span class="eyebrow">The Bitcoin encyclopedia</span><span class="rule"></span><span class="eyebrow">{all.length} entries</span></div>
