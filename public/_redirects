@@ -1,0 +1,7 @@
+# Lightning Address resolution for the apex domain.
+# A wallet paying hello@timechain.wiki fetches /.well-known/lnurlp/hello here;
+# we 302 it to the LNbits node (served via Cloudflare Tunnel at
+# ln.timechain.wiki, payments-only ingress). The LNbits pay-link username is
+# `timechain` (usernames are global per instance — `hello` is taken by the
+# BitcoinEconAI wallet), so this mapping is what makes the address hello@.
+/.well-known/lnurlp/hello  https://ln.timechain.wiki/.well-known/lnurlp/timechain  302
