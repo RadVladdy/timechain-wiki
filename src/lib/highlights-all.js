@@ -20,6 +20,14 @@ function localAll() {
   return out;
 }
 
+function localRemove(url, id) {
+  try {
+    const k = "tw:hl:" + url;
+    const cur = JSON.parse(localStorage.getItem(k) || "[]");
+    localStorage.setItem(k, JSON.stringify(cur.filter((h) => h.id !== id)));
+  } catch {}
+}
+
 export async function renderAllHighlights() {
   const box = document.getElementById("hl-all");
   const titles = JSON.parse(document.getElementById("wiki-titles").textContent || "{}");
@@ -27,6 +35,7 @@ export async function renderAllHighlights() {
     const slug = (url.match(/\/wiki\/([a-z0-9-]+)/) || [])[1];
     return slug ? (titles[slug] || slug) : url === "/" ? "Home" : url;
   };
+  let backend = null; // "nostr" | "pubky" — which session (if any) restored
 
   // gather: local always; remote per stored session (lazy imports keep the
   // anonymous path light — this page is only reached from signed-in UI anyway)
@@ -36,10 +45,12 @@ export async function renderAllHighlights() {
   try {
     const stored = JSON.parse(localStorage.getItem("tw:pubky") || localStorage.getItem("tw:auth") || "null");
     if (stored?.method === "pubky") {
+      backend = "pubky";
       const p = await import("./pubky.js");
       await p.restore();
       for (const h of await p.fetchAll()) if (!byId.has(h.id)) byId.set(h.id, h);
     } else if (stored) {
+      backend = "nostr";
       const n = await import("./nostr.js");
       await n.restore();
       const { pub, priv } = await n.fetchAllMine();
@@ -82,12 +93,55 @@ export async function renderAllHighlights() {
       card.href = `${url}#twhl=${encodeURIComponent(h.id)}`;
       card.appendChild(el("blockquote", "tw-quote", h.anchor.exact));
       if (h.note) card.appendChild(el("p", "hl-card-note", h.note));
+      const foot = el("span", "hl-card-foot");
       const st = el("span", "tw-status " + (SRC_CLS[h.source] || "loc"));
       st.appendChild(el("i", "tw-status-dot"));
       st.appendChild(document.createTextNode(SRC_LABEL[h.source] || "On this device"));
-      card.appendChild(st);
+      foot.appendChild(st);
+
+      // two-tap delete: first tap arms ("Delete?"), second tap executes
+      const del = el("button", "hl-del", "Delete");
+      del.type = "button";
+      del.title = "Delete this highlight everywhere it's stored";
+      del.addEventListener("click", async (ev) => {
+        ev.preventDefault(); ev.stopPropagation();
+        if (!del.classList.contains("armed")) {
+          del.classList.add("armed"); del.textContent = "Delete?";
+          setTimeout(() => { del.classList.remove("armed"); del.textContent = "Delete"; }, 4000);
+          return;
+        }
+        // Instant local removal; the network side (relay deletion / blob
+        // rewrite / homeserver delete) runs in the background with a timeout —
+        // a stalled signer prompt must never freeze the page.
+        localRemove(url, h.id);
+        const gi = items.indexOf(h); if (gi > -1) items.splice(gi, 1);
+        card.remove();
+        if (!sec.querySelector(".hl-card")) sec.remove();
+        const bg = (async () => {
+          if (h.source === "nostr" && backend === "nostr") {
+            const n = await import("./nostr.js");
+            await n.deleteEvent(h.id);
+          } else if (h.source === "nostrp" && backend === "nostr") {
+            const n = await import("./nostr.js");
+            await n.privateSave(url, items.filter((x) => x.source === "nostrp"));
+          } else if (h.source === "pubky" && backend === "pubky") {
+            const p = await import("./pubky.js");
+            await p.remove(h.id, p.pageKey(url));
+          }
+        })();
+        Promise.race([bg, new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 12000))])
+          .catch((e) => alertNote(box, "Removed here, but the synced copy may not be deleted yet (" + (e.message || e) + ") — approve the request in your signer, or delete again if it reappears."));
+      });
+      foot.appendChild(del);
+      card.appendChild(foot);
       sec.appendChild(card);
     }
     box.appendChild(sec);
   }
+}
+
+function alertNote(box, msg) {
+  const n = el("p", "hl-note", msg);
+  box.prepend(n);
+  setTimeout(() => n.remove(), 6000);
 }

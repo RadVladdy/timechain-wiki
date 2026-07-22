@@ -412,7 +412,12 @@ function renderPanel() {
         try { const p = await plib(); await p.remove(hl.id, p.pageKey(store.pageUrl())); }
         catch (e) { toast("Couldn't delete from Pubky: " + (e.message || e), true); return; }
       } else if (hl && hl.source === "nostr") {
-        try { await (await nlib()).deleteEvent(hl.id); } catch {}
+        // Background + timeout — signing the deletion may need an extension
+        // prompt; never let a stalled prompt freeze the UI.
+        nlib().then((n) => Promise.race([
+          n.deleteEvent(hl.id),
+          new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 10000)),
+        ])).catch(() => toast("Deletion request may not have reached relays (check your signer) — if it reappears, delete again.", true));
       }
       store.remove(h.id); list = store.all(); if (activeId === h.id) activeId = null; renderPanel(); paint();
       if (hl && hl.source === "nostrp") queuePrivateSync();
