@@ -42,6 +42,26 @@ function infoTip() {
   s.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><path d="M12 11v6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="7.6" r="1.3" fill="currentColor"/></svg>`;
   const tip = el("span", "tw-tip", TIP_TEXT);
   s.appendChild(tip);
+  // Position on show: fixed + clamped to the viewport (the panel sits at the
+  // screen edge, where a centered absolute tip clips off-screen).
+  const place = () => {
+    const r = s.getBoundingClientRect();
+    const w = Math.min(300, Math.floor(innerWidth * 0.86));
+    tip.style.width = w + "px";
+    let left = Math.round(r.left + r.width / 2 - w / 2);
+    left = Math.max(8, Math.min(left, innerWidth - w - 8));
+    tip.style.left = left + "px";
+    tip.style.top = "-9999px"; // measurable but out of the way
+    requestAnimationFrame(() => {
+      const th = tip.offsetHeight || 120;
+      let top = r.top - th - 10;
+      if (top < 8) top = Math.min(r.bottom + 10, innerHeight - th - 8);
+      tip.style.top = Math.round(Math.max(8, top)) + "px";
+    });
+  };
+  s.addEventListener("mouseenter", place);
+  s.addEventListener("focus", place);
+  s.addEventListener("click", place);
   return s;
 }
 const MODE_TOASTS = {

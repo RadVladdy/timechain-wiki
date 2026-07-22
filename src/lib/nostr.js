@@ -346,17 +346,15 @@ export async function fetchProfile(pubkey, ms = 8000) {
   } catch { return null; }
 }
 
-// Fetch this reader's highlights for one page. Resolves after a short window.
-export async function fetch(pubkey, path, ms = 2500) {
+// Fetch this reader's highlights for one page. querySync collects until EOSE
+// (the old fixed 2.5s subscribe window silently missed events on slow starts —
+// the same flaw fetchProfile had).
+export async function fetch(pubkey, path, ms = 8000) {
   const filter = { kinds: [9802], authors: [pubkey], "#r": [canonUrl(path)] };
-  const events = await new Promise((resolve) => {
-    const found = new Map();
-    const sub = pool.subscribeMany(RELAYS, [filter], {
-      onevent: (e) => found.set(e.id, e),
-      oneose: () => {},
-    });
-    setTimeout(() => { try { sub.close(); } catch {} resolve([...found.values()]); }, ms);
-  });
+  const events = await Promise.race([
+    pool.querySync(RELAYS, filter),
+    new Promise((res) => setTimeout(() => res([]), ms)),
+  ]).catch(() => []);
   return events.map((e) => {
     const t = (k) => (e.tags.find((x) => x[0] === k) || [])[1];
     return {
