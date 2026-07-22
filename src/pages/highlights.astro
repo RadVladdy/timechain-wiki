@@ -1,0 +1,19 @@
+---
+import Base from "../layouts/Base.astro";
+import titles from "../lib/wiki-index.json";
+---
+<Base title="My highlights" description="Everything you've highlighted across the encyclopedia — local, private, and public.">
+  <div class="learn"><div class="wrap">
+    <div class="lead">
+      <div class="kicker"><span class="eyebrow">TimechainWiki</span></div>
+      <h1>My <span class="accent">highlights</span></h1>
+      <p class="lede">Everything you've highlighted across the encyclopedia, grouped by entry — from this device, your private sync, and your public account. Only you see this view.</p>
+    </div>
+    <div id="hl-all" class="hl-all"><p class="tw-empty">Loading your highlights…</p></div>
+  </div></div>
+  <script type="application/json" id="wiki-titles" set:html={JSON.stringify(titles)}></script>
+  <script>
+    import { renderAllHighlights } from "../lib/highlights-all.js";
+    renderAllHighlights();
+  </script>
+</Base>

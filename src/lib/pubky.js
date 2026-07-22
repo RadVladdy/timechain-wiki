@@ -144,6 +144,30 @@ export async function getProfile() {
   } catch { return null; }
 }
 
+// Everything under the wiki's highlights tree, across all pages. list() may
+// return files (recursive) or per-page dirs — handle both.
+export async function fetchAll() {
+  if (!session) return [];
+  const root = `/pub/${APP}/highlights/`;
+  let urls = [];
+  try { urls = await session.storage.list(root); } catch { return []; }
+  const files = [];
+  for (const u of urls) {
+    const path = u.replace(/^pubky:\/\/[^/]+/, "");
+    if (path.endsWith(".json")) files.push(path);
+    else { try { (await session.storage.list(path)).forEach((v) => { const q = v.replace(/^pubky:\/\/[^/]+/, ""); if (q.endsWith(".json")) files.push(q); }); } catch {} }
+  }
+  const out = [];
+  for (const path of files) {
+    try {
+      const rec = await session.storage.getJson(path);
+      const id = path.split("/").pop().replace(/\.json$/, "");
+      out.push({ id, source: "pubky", url: rec.url || "/", anchor: rec.anchor, note: rec.note || "", createdAt: rec.createdAt || 0 });
+    } catch {}
+  }
+  return out;
+}
+
 // Fetch this page's highlights from the homeserver.
 export async function fetch(key) {
   if (!session) return [];

@@ -16,14 +16,24 @@ let user = null; // { method:'nip07'|'nip46'|'pubky', … }
 
 const $ = (sel, r = document) => r.querySelector(sel);
 
-// Reader-controlled auto-publish: when ON (default), a signed-in reader's new
-// highlights publish to their account as they're made (the highlighter.com sync
-// model). OFF = highlights stay on this device until published one by one.
-const AUTOSYNC_KEY = "tw:autosync";
-const autosync = () => { try { return localStorage.getItem(AUTOSYNC_KEY) !== "0"; } catch { return true; } };
-const setAutosync = (v) => { try { localStorage.setItem(AUTOSYNC_KEY, v ? "1" : "0"); } catch {} };
+// Reader-controlled sync defaults. Highlights: "private" (encrypted NIP-78 app
+// data — synced, feed-invisible, readable only by the reader) | "public"
+// (NIP-84 highlights — the social model) | "off" (this device only).
+// Suggestions: "private" (NIP-17 encrypted DM) | "public" (kind-1 note).
+// Every highlight card can override the default per item.
+const MODE_KEY = "tw:syncmode", SUG_KEY = "tw:sugmode";
+function syncMode() {
+  try {
+    const v = localStorage.getItem(MODE_KEY);
+    if (v) return v;
+    const old = localStorage.getItem("tw:autosync"); // migrate the old binary toggle
+    return old === "0" ? "off" : old === "1" ? "public" : "private";
+  } catch { return "private"; }
+}
+function sugMode() { try { return localStorage.getItem(SUG_KEY) || "private"; } catch { return "private"; } }
+const setMode = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
 
-const TIP_TEXT = "Published highlights use Nostr's highlight format (NIP-84, kind 9802) — any note you write travels inside the same event, not as a separate post. They go to public relays under your account, and apps that understand highlights (Amethyst, Highlighter) show them on your profile or feed. Pubky highlights save to your own homeserver instead. \u201cSuggest\u201d is different: it sends a regular public note (kind 1) to the wiki's editors. With auto-publish off, new highlights stay on this device until you press Publish.";
+const TIP_TEXT = "Private sync stores highlights + notes as encrypted app data on Nostr relays (NIP-78, kind 30078) — synced across your devices, readable only by you, never shown in anyone's feed. Public uses Nostr's highlight format (NIP-84, kind 9802; your note travels inside the same event) — highlight-aware apps like Amethyst or Highlighter show these on your profile/feed. Off keeps everything on this device. Suggestions: Private sends an encrypted direct message to the wiki's editors (NIP-17 gift wrap — invisible to feeds, sender hidden from relays); Public sends a regular note (kind 1) that appears on your feed. Pubky highlights save to your own homeserver (public today — private storage is on Pubky's roadmap). Private modes need a signer that supports encryption (most modern extensions + Amber do).";
 function infoTip() {
   const s = el("span", "tw-info");
   s.tabIndex = 0;
@@ -34,24 +44,42 @@ function infoTip() {
   s.appendChild(tip);
   return s;
 }
-function toggleRow(label) {
-  const row = el("label", "tw-toggle-row");
-  const sw = el("span", "tw-switch");
-  const input = document.createElement("input");
-  input.type = "checkbox";
-  input.checked = autosync();
-  sw.appendChild(input); sw.appendChild(el("i"));
-  row.appendChild(sw);
+const MODE_TOASTS = {
+  private: "New highlights sync privately — encrypted, invisible to feeds.",
+  public: "New highlights publish publicly to your account as you make them.",
+  off: "New highlights stay on this device until you act on them.",
+};
+function segRow(label, key, options, withTip) {
+  const row = el("div", "tw-seg-row");
+  row.dataset.key = key;
   row.appendChild(el("span", "tw-toggle-t", label));
-  row.appendChild(infoTip());
-  input.addEventListener("change", () => {
-    setAutosync(input.checked);
-    document.querySelectorAll('.tw-toggle-row input').forEach((i) => { i.checked = input.checked; });
-    toast(input.checked
-      ? "Auto-publish on — new highlights go to your account as you make them."
-      : "Auto-publish off — new highlights stay on this device until you press Publish.");
-  });
+  const seg = el("div", "tw-seg");
+  const cur = key === MODE_KEY ? syncMode() : sugMode();
+  for (const o of options) {
+    const b = el("button", "tw-seg-b" + (o.v === cur ? " on" : ""), o.label);
+    b.type = "button";
+    b.dataset.v = o.v;
+    b.addEventListener("click", () => {
+      setMode(key, o.v);
+      document.querySelectorAll(`.tw-seg-row[data-key="${key}"] .tw-seg-b`).forEach((x) => x.classList.toggle("on", x.dataset.v === o.v));
+      if (key === MODE_KEY) toast(MODE_TOASTS[o.v]);
+      else toast(o.v === "private" ? "Suggestions send as encrypted DMs — nothing on your feed." : "Suggestions send as public notes on your feed.");
+    });
+    seg.appendChild(b);
+  }
+  row.appendChild(seg);
+  if (withTip) row.appendChild(infoTip());
   return row;
+}
+function settingsBlock(compact) {
+  const box = el("div", "tw-settings");
+  box.appendChild(segRow("Highlights", MODE_KEY, [
+    { v: "private", label: "Private" }, { v: "public", label: "Public" }, { v: "off", label: "Off" },
+  ], true));
+  box.appendChild(segRow("Suggestions", SUG_KEY, [
+    { v: "private", label: "Private" }, { v: "public", label: "Public" },
+  ], false));
+  return box;
 }
 const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
 const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
@@ -155,20 +183,45 @@ async function makeHighlight(range) {
     setActive(hl.id);
     requestAnimationFrame(() => { const ta = $(`.tw-item[data-id="${hl.id}"] textarea`); ta && ta.focus(); });
   }
-  if (user && autosync() && (await remoteReady())) publishOne(hl.id);
+  if (user && (await remoteReady())) {
+    if (isPubky()) { publishOne(hl.id); return; }
+    const m = syncMode();
+    if (m === "public") publishOne(hl.id);
+    else if (m === "private") {
+      const n = await nlib();
+      if (n.canEncrypt()) {
+        store.upsert({ id: hl.id, source: "nostrp", published: true, pubkey: user.pubkey });
+        list = store.all(); renderPanel(); paint();
+        queuePrivateSync();
+      } else {
+        toast("Your signer can't encrypt (NIP-44) — highlight kept on this device. Use Publish for public, or a signer like Alby/Amber for private sync.", true);
+      }
+    }
+  }
 }
+
+// Private sync: the page's private highlights live in ONE encrypted, replaceable
+// Nostr app-data event — any change re-writes the whole page blob (debounced).
+async function privateSyncNow() {
+  if (!user || isPubky()) return;
+  const n = await nlib();
+  if (!n.canEncrypt()) return;
+  const items = store.all().filter((h) => h.source === "nostrp");
+  await n.privateSave(store.pageUrl(), items);
+}
+const queuePrivateSync = debounce(() => privateSyncNow().catch((e) => toast("Private sync failed: " + (e.message || e), true)), 1200);
 
 // ── side panel ───────────────────────────────────────────────────────────
 const panel = el("aside", "tw-panel");
 panel.hidden = true;
 panel.innerHTML = `
   <div class="tw-p-head">
-    <div><b>Your highlights</b><span class="tw-count">0</span></div>
+    <div><b>Your highlights</b><span class="tw-count">0</span><a class="tw-all-link" href="/highlights">All pages →</a></div>
     <button type="button" class="tw-x" aria-label="Close">✕</button>
   </div>
   <div class="tw-auth"></div>
   <div class="tw-list"></div>
-  <div class="tw-p-foot">Signed out, highlights and notes stay on this device — private. Signed in, they publish to your own Nostr or Pubky account as you make them — publicly, like posts. "Suggest" sends a note to the wiki's editors, also public. The auto-publish toggle (when signed in) controls whether new highlights publish as you make them.</div>`;
+  <div class="tw-p-foot">Signed out, highlights and notes stay on this device — private. Signed in, they publish to your own Nostr or Pubky account as you make them — publicly, like posts. "Suggest" sends your note to the wiki's editors — privately (encrypted DM) or publicly, your choice. Signed in, the Highlights setting picks the default for new highlights: Private (encrypted sync), Public (feed-visible), or Off; every card can override it.</div>`;
 document.body.appendChild(panel);
 
 const fab = el("button", "tw-fab");
@@ -211,6 +264,7 @@ const saveNote = debounce(async (id, val) => {
     try { const p = await plib(); await p.publish(hl, p.pageKey(store.pageUrl())); }
     catch (e) { toast("Couldn't save the note to Pubky: " + (e.message || e), true); }
   }
+  if (hl && hl.source === "nostrp") queuePrivateSync();
 }, 500);
 
 // Nostr edit = publish a fresh kind-9802 with the new note and delete the old one
@@ -261,14 +315,17 @@ function renderPanel() {
     // Status is plain text with a dot — deliberately not pill/button-shaped, so
     // it can't be mistaken for an action. Saving is automatic; this just states
     // where the highlight lives right now.
-    const synced = h.source === "nostr" || h.source === "pubky";
-    const statusText = h.source === "nostr" ? "Public on Nostr" : h.source === "pubky" ? "Public on Pubky" : "On this device";
-    const status = el("span", "tw-status " + (synced ? "pub" : "loc"));
+    const statusText = h.source === "nostr" ? "Public on Nostr" : h.source === "pubky" ? "Public on Pubky"
+      : h.source === "nostrp" ? "Private · synced" : "On this device";
+    const statusCls = h.source === "nostrp" ? "priv" : (h.source === "nostr" || h.source === "pubky") ? "pub" : "loc";
+    const status = el("span", "tw-status " + statusCls);
     status.appendChild(el("i", "tw-status-dot"));
     status.appendChild(document.createTextNode(statusText));
-    status.title = synced
-      ? "Published to your own account — publicly visible. Saves automatically."
-      : "Saved only in this browser — private. Saves automatically.";
+    status.title = h.source === "nostrp"
+      ? "Synced across your devices as encrypted data — only you can read it; never in feeds."
+      : statusCls === "pub"
+        ? "Published to your own account — publicly visible. Saves automatically."
+        : "Saved only in this browser — private. Saves automatically.";
     foot.appendChild(status);
     const spacer = el("span", "tw-sp"); foot.appendChild(spacer);
 
@@ -280,11 +337,38 @@ function renderPanel() {
     else sug.addEventListener("click", () => suggestOne(h.id, sug));
     foot.appendChild(sug);
 
-    if (user && h.source === "local") {
+    // per-card visibility overrides
+    if (user && (h.source === "local" || h.source === "nostrp")) {
       const pub = el("button", "tw-mini", "Publish");
-      pub.title = `Publish publicly to your own ${isPubky() ? "Pubky" : "Nostr"} account`;
+      pub.title = h.source === "nostrp"
+        ? "Make THIS highlight public — publishes it to your account (visible in feeds)"
+        : `Publish publicly to your own ${isPubky() ? "Pubky" : "Nostr"} account`;
       pub.addEventListener("click", () => publishOne(h.id, pub));
       foot.appendChild(pub);
+    }
+    if (user && !isPubky() && h.source === "local") {
+      const pv = el("button", "tw-mini", "Private");
+      pv.title = "Sync THIS highlight privately — encrypted, cross-device, never in feeds";
+      pv.addEventListener("click", async () => {
+        const n = await nlib();
+        if (!n.canEncrypt()) { toast("Your signer can't encrypt (NIP-44) — private sync unavailable.", true); return; }
+        store.upsert({ id: h.id, source: "nostrp", published: true, pubkey: user.pubkey });
+        list = store.all(); renderPanel(); paint(); queuePrivateSync();
+      });
+      foot.appendChild(pv);
+    }
+    if (user && !isPubky() && h.source === "nostr") {
+      const mp = el("button", "tw-mini", "Make private");
+      mp.title = "Retract from public: asks relays to delete the public event and keeps the highlight in your encrypted private sync";
+      mp.addEventListener("click", async () => {
+        const n = await nlib();
+        if (!n.canEncrypt()) { toast("Your signer can't encrypt (NIP-44) — private sync unavailable.", true); return; }
+        try { n.deleteEvent(h.id).catch(() => {}); } catch {}
+        store.upsert({ id: h.id, source: "nostrp" });
+        list = store.all(); renderPanel(); paint(); queuePrivateSync();
+        toast("Retracted — deletion requested from relays (best-effort; copies may persist). Now in private sync.");
+      });
+      foot.appendChild(mp);
     }
     const del = el("button", "tw-mini danger", "Delete");
     del.addEventListener("click", async () => {
@@ -299,6 +383,7 @@ function renderPanel() {
         try { await (await nlib()).deleteEvent(hl.id); } catch {}
       }
       store.remove(h.id); list = store.all(); if (activeId === h.id) activeId = null; renderPanel(); paint();
+      if (hl && hl.source === "nostrp") queuePrivateSync();
     });
     foot.appendChild(del);
     item.appendChild(foot);
@@ -351,7 +436,7 @@ signinModal.innerHTML = `
     <div class="tw-dialog-actions"><button type="button" class="tw-dialog-cancel" data-siclose>Cancel</button></div>
   </div>`;
 document.body.appendChild(signinModal);
-signinModal.querySelector(".tw-si-toggle").appendChild(toggleRow("Auto-publish highlights once signed in"));
+signinModal.querySelector(".tw-si-toggle").appendChild(settingsBlock(true));
 function closeSignin() { signinModal.hidden = true; }
 signinModal.querySelectorAll("[data-siclose]").forEach((e) => e.addEventListener("click", closeSignin));
 signinModal.querySelectorAll("button[data-m]").forEach((b) => b.addEventListener("click", () => { closeSignin(); doLogin(b.dataset.m); }));
@@ -369,6 +454,7 @@ accountModal.innerHTML = `
       <div class="tw-acc-meta"><b class="tw-acc-name"></b><span class="tw-acc-id mono"></span></div>
     </div>
     <p class="tw-dialog-d tw-acc-sub"></p>
+    <a class="tw-acc-all" href="/highlights">My highlights — all pages →</a>
     <div class="tw-dialog-actions">
       <button type="button" class="tw-dialog-cancel" data-acclose>Close</button>
       <button type="button" class="tw-dialog-ok tw-acc-out">Sign out</button>
@@ -459,18 +545,19 @@ confirmModal.innerHTML = `
     <p class="tw-dialog-d"></p>
     <blockquote class="tw-quote tw-cf-quote"></blockquote>
     <p class="tw-cf-note"></p>
+    <div class="tw-cf-choice" hidden></div>
     <div class="tw-dialog-actions">
       <button type="button" class="tw-dialog-cancel" data-cfcancel>Cancel</button>
       <button type="button" class="tw-dialog-ok"></button>
     </div>
   </div>`;
 document.body.appendChild(confirmModal);
-let confirmResolve = null;
-function closeConfirm(val) { confirmModal.hidden = true; const r = confirmResolve; confirmResolve = null; r && r(val); }
+let confirmResolve = null, confirmChoice = null;
+function closeConfirm(ok) { confirmModal.hidden = true; const r = confirmResolve; confirmResolve = null; r && r({ ok, choice: confirmChoice }); }
 confirmModal.querySelectorAll("[data-cfcancel]").forEach((e) => e.addEventListener("click", () => closeConfirm(false)));
 confirmModal.querySelector(".tw-dialog-ok").addEventListener("click", () => closeConfirm(true));
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !confirmModal.hidden) closeConfirm(false); });
-function askConfirm({ title, desc, quote, note, confirmText }) {
+function askConfirm({ title, desc, quote, note, confirmText, choice }) {
   return new Promise((resolve) => {
     confirmResolve = resolve;
     confirmModal.querySelector(".tw-dialog-t").textContent = title;
@@ -478,6 +565,23 @@ function askConfirm({ title, desc, quote, note, confirmText }) {
     confirmModal.querySelector(".tw-cf-quote").textContent = quote || "";
     confirmModal.querySelector(".tw-cf-note").textContent = note || "";
     confirmModal.querySelector(".tw-dialog-ok").textContent = confirmText;
+    const box = confirmModal.querySelector(".tw-cf-choice");
+    box.innerHTML = ""; box.hidden = !choice; confirmChoice = null;
+    if (choice) {
+      confirmChoice = choice.def;
+      for (const o of choice.options) {
+        const card = el("button", "tw-choice" + (o.v === choice.def ? " on" : "") + (o.disabled ? " off" : ""));
+        card.type = "button";
+        card.appendChild(el("b", null, o.label));
+        card.appendChild(el("span", null, o.disabled ? "Needs a signer with encryption (Alby, Amber…)" : o.hint));
+        if (!o.disabled) card.addEventListener("click", () => {
+          confirmChoice = o.v;
+          box.querySelectorAll(".tw-choice").forEach((c) => c.classList.remove("on"));
+          card.classList.add("on");
+        });
+        box.appendChild(card);
+      }
+    }
     confirmModal.hidden = false;
   });
 }
@@ -504,21 +608,35 @@ async function suggestOne(id, btn) {
     toast("Suggestions travel over Nostr, and Pubky can't receive messages yet — sign in with a Nostr method to send one.", true);
     return;
   }
-  const ok = await askConfirm({
+  const n = await nlib();
+  const canPriv = n.canEncrypt();
+  const res = await askConfirm({
     title: "Send this to the wiki?",
-    desc: "Your note and the highlighted passage go to the wiki's editors as a public Nostr note, signed as you — not private. Every suggestion is reviewed by hand before anything changes.",
+    desc: "Every suggestion is reviewed by hand before anything changes.",
     quote: h.anchor.exact,
     note: text,
     confirmText: "Send suggestion",
+    choice: {
+      def: canPriv ? sugMode() : "public",
+      options: [
+        { v: "private", label: "Privately", hint: "Encrypted DM to the editors — nothing on your feed; sender hidden from relays.", disabled: !canPriv },
+        { v: "public", label: "Publicly", hint: "A regular Nostr note on your feed, signed as you." },
+      ],
+    },
   });
-  if (!ok) return;
+  if (!res || !res.ok) return;
   btn.disabled = true; btn.textContent = "Sending…";
   try {
-    const evId = await (await nlib()).publishSuggestion({ exact: h.anchor.exact, text, path: store.pageUrl() });
-    store.upsert({ id, suggestedAt: Date.now(), suggestedEvent: evId });
+    const payload = { exact: h.anchor.exact, text, path: store.pageUrl() };
+    const evId = res.choice === "private"
+      ? await n.publishSuggestionPrivate(payload)
+      : await n.publishSuggestion(payload);
+    store.upsert({ id, suggestedAt: Date.now(), suggestedEvent: evId, suggestedVia: res.choice });
     list = store.all();
     renderPanel();
-    toast("Suggestion sent — thank you. The editors read every one.");
+    toast(res.choice === "private"
+      ? "Suggestion sent privately — thank you. The editors read every one."
+      : "Suggestion sent — thank you. The editors read every one.");
   } catch (e) {
     toast("Couldn't send the suggestion: " + (e.message || e), true);
     btn.disabled = false; btn.textContent = "Suggest";
@@ -631,7 +749,8 @@ function renderAuth() {
   if (user) {
     const unpublished = list.filter((h) => h.source === "local").length;
     box.innerHTML = `<div class="tw-signed"><span class="dot on"></span>Signed in · <b>${userLabel()}</b></div>`;
-    box.appendChild(toggleRow("Auto-publish new highlights"));
+    if (isPubky()) box.appendChild(el("div", "tw-pk-note", "Highlights save to your Pubky homeserver. Suggestions travel over Nostr."));
+    else box.appendChild(settingsBlock(false));
     if (unpublished > 0) {
       const b = el("button", "tw-syncbtn", `Publish ${unpublished} to ${isPubky() ? "Pubky" : "Nostr"} (public)`);
       b.addEventListener("click", () => publishAll(b));
@@ -659,6 +778,7 @@ async function publishOne(id, btn) {
     }
     list = store.all();
     renderPanel(); paint();
+    queuePrivateSync(); // if it was in the private blob, drop it there
   } catch (e) {
     toast("Publish failed: " + (e.message || e), true);
     if (btn) { btn.disabled = false; btn.textContent = "Publish"; }
@@ -675,7 +795,12 @@ async function syncRemote() {
   try {
     let incoming;
     if (isPubky()) { const p = await plib(); incoming = await p.fetch(p.pageKey(store.pageUrl())); }
-    else { incoming = await (await nlib()).fetch(user.pubkey, store.pageUrl()); }
+    else {
+      const n = await nlib();
+      const pub = await n.fetch(user.pubkey, store.pageUrl());
+      const priv = n.canEncrypt() ? await n.privateFetch(store.pageUrl()) : [];
+      incoming = [...(pub || []), ...(priv || [])];
+    }
     if (incoming && incoming.length) { list = store.merge(incoming); paint(); renderPanel(); }
   } catch {}
 }
@@ -754,6 +879,14 @@ export async function init() {
   });
 
   window.addEventListener("resize", debounce(() => { paint(); positionFab(); }, 150));
+
+  // Deep link from /highlights: #twhl=<id> → activate + scroll once resolvable.
+  const wanted = (location.hash.match(/^#twhl=(.+)$/) || [])[1];
+  if (wanted) {
+    const id = decodeURIComponent(wanted);
+    const tryJump = () => { if (ranges.has(id)) { openPanel(); scrollTo(id); return true; } return false; };
+    if (!tryJump()) { let n = 0; const iv = setInterval(() => { if (tryJump() || ++n > 20) clearInterval(iv); }, 400); }
+  }
 
   // If a session restored, pull this page's highlights from the sync backend.
   if (user) syncRemote();
