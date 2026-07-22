@@ -20,9 +20,11 @@ const toHex = (b) => Array.from(b).map((x) => x.toString(16).padStart(2, "0")).j
 const fromHex = (h) => new Uint8Array(h.match(/.{1,2}/g).map((x) => parseInt(x, 16)));
 const onAuth = (url) => { try { window.open(url, "_blank", "noopener"); } catch {} };
 
-// Canonical host so highlight `r` tags match across preview deploy-hash
-// subdomains and (eventually) the real domain — read-back stays self-consistent.
-const CANON = "https://timechain-astro.pages.dev";
+// Canonical host for highlight `r` tags and private-blob keys. Writes use the
+// live domain; reads ALSO check the legacy preview host so highlights made
+// before the cutover keep working.
+const CANON = "https://timechain.wiki";
+const CANON_LEGACY = "https://timechain-astro.pages.dev";
 const AUTH_KEY = "tw:auth";
 const pool = new SimplePool();
 let signer = null; // { pubkey, signEvent(evt) }
@@ -193,6 +195,7 @@ export async function publishSuggestion({ exact, text, path }) {
 // only ciphertext; feed clients never render kind 30078.
 const APPD_KIND = 30078;
 const dTag = (path) => "timechain.wiki:hl:" + canonUrl(path);
+const dTagLegacy = (path) => "timechain.wiki:hl:" + CANON_LEGACY + path;
 
 async function ensureSigner() {
   if (!signer) {
@@ -217,22 +220,48 @@ export async function privateSave(path, highlights) {
   };
   const signed = await signer.signEvent(tmpl);
   await Promise.any(pool.publish(RELAYS, signed)).catch(() => {});
+  // One-time migration: clear the legacy preview-host blob for this page so a
+  // deleted highlight can't resurrect from it (live blob is authoritative now).
+  try {
+    if (!localStorage.getItem("tw:lc:" + path)) {
+      const wipe = await signer.signEvent({
+        kind: APPD_KIND, created_at: Math.floor(Date.now() / 1000) + 1,
+        content: await signer.enc44(signer.pubkey, "[]"),
+        tags: [["d", dTagLegacy(path)]], pubkey: signer.pubkey,
+      });
+      await Promise.any(pool.publish(RELAYS, wipe)).catch(() => {});
+      localStorage.setItem("tw:lc:" + path, "1");
+    }
+  } catch {}
   return signed.id;
 }
 
 export async function privateFetch(path, ms = 3500) {
   if (!signer?.dec44) return null; // unknown — can't decrypt this session
   const evs = await Promise.race([
-    pool.querySync(RELAYS, { kinds: [APPD_KIND], authors: [signer.pubkey], "#d": [dTag(path)] }),
+    pool.querySync(RELAYS, { kinds: [APPD_KIND], authors: [signer.pubkey], "#d": [dTag(path), dTagLegacy(path)] }),
     new Promise((res) => setTimeout(() => res(null), ms)),
   ]).catch(() => null);
   if (evs === null) return null; // unknown — timeout
   if (!evs.length) return [];    // genuinely no blob for this page
-  const newest = evs.reduce((a, b) => (b.created_at > a.created_at ? b : a));
+  // newest blob per d-tag; merge legacy + live (live wins on id collision)
+  const byD = new Map();
+  for (const e of evs) {
+    const d = (e.tags.find((x) => x[0] === "d") || [])[1];
+    const cur = byD.get(d);
+    if (!cur || e.created_at > cur.created_at) byD.set(d, e);
+  }
+  const merged = new Map();
+  const order = [dTagLegacy(path), dTag(path)]; // live last → wins
   try {
-    const list = JSON.parse(await signer.dec44(signer.pubkey, newest.content));
-    return list.map((h) => ({ ...h, source: "nostrp", published: true, pubkey: signer.pubkey }));
+    for (const d of order) {
+      const e = byD.get(d);
+      if (!e) continue;
+      const list = JSON.parse(await signer.dec44(signer.pubkey, e.content));
+      for (const h of list) merged.set(h.id, h);
+    }
   } catch { return null; }       // unknown — decrypt failed
+  return [...merged.values()].map((h) => ({ ...h, source: "nostrp", published: true, pubkey: signer.pubkey }));
 }
 
 // Everything the signed-in reader has on Nostr for THIS wiki, across all pages —
@@ -248,13 +277,14 @@ export async function fetchAllMine(ms = 6000) {
   ]).catch(() => null);
   if (raced === null) return { pub: [], priv: [], ok: false };
   const [pubEvs, privEvs] = raced;
+  const stripHost = (r) => r.startsWith(CANON) ? r.slice(CANON.length) : r.startsWith(CANON_LEGACY) ? r.slice(CANON_LEGACY.length) : null;
   const pub = (pubEvs || [])
-    .filter((e) => ((e.tags.find((x) => x[0] === "r") || [])[1] || "").startsWith(CANON))
+    .filter((e) => stripHost((e.tags.find((x) => x[0] === "r") || [])[1] || "") !== null)
     .map((e) => {
       const tag = (k) => (e.tags.find((x) => x[0] === k) || [])[1];
       return {
         id: e.id, source: "nostr",
-        url: (tag("r") || "").slice(CANON.length) || "/",
+        url: stripHost(tag("r") || "") || "/",
         note: tag("comment") || "",
         anchor: { exact: e.content, prefix: tag("tw-prefix") || "", suffix: tag("tw-suffix") || "", pos: Number(tag("tw-pos") || 0) },
         createdAt: e.created_at * 1000,
@@ -262,20 +292,22 @@ export async function fetchAllMine(ms = 6000) {
     });
   const priv = [];
   if (signer.dec44) {
-    const prefix = "timechain.wiki:hl:" + CANON;
+    const prefixes = ["timechain.wiki:hl:" + CANON, "timechain.wiki:hl:" + CANON_LEGACY];
     // newest blob per d-tag wins (replaceable events; relays may return stale copies)
     const byD = new Map();
     for (const e of privEvs || []) {
       const d = (e.tags.find((x) => x[0] === "d") || [])[1] || "";
-      if (!d.startsWith(prefix)) continue;
+      if (!prefixes.some((p) => d.startsWith(p))) continue;
       const cur = byD.get(d);
       if (!cur || e.created_at > cur.created_at) byD.set(d, e);
     }
+    const seenIds = new Set();
     for (const [d, e] of byD) {
       try {
         const list = JSON.parse(await signer.dec44(signer.pubkey, e.content));
-        const path = d.slice(prefix.length) || "/";
-        for (const h of list) priv.push({ ...h, source: "nostrp", url: path });
+        const pfx = prefixes.find((p) => d.startsWith(p));
+        const path = d.slice(pfx.length) || "/";
+        for (const h of list) { if (!seenIds.has(h.id)) { seenIds.add(h.id); priv.push({ ...h, source: "nostrp", url: path }); } }
       } catch {}
     }
   }
@@ -357,7 +389,7 @@ export async function fetchProfile(pubkey, ms = 8000) {
 // (the old fixed 2.5s subscribe window silently missed events on slow starts —
 // the same flaw fetchProfile had).
 export async function fetch(pubkey, path, ms = 8000) {
-  const filter = { kinds: [9802], authors: [pubkey], "#r": [canonUrl(path)] };
+  const filter = { kinds: [9802], authors: [pubkey], "#r": [canonUrl(path), CANON_LEGACY + path] };
   const events = await Promise.race([
     pool.querySync(RELAYS, filter),
     new Promise((res) => setTimeout(() => res(null), ms)),
