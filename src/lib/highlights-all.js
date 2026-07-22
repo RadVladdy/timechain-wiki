@@ -129,8 +129,10 @@ export async function renderAllHighlights() {
             await p.remove(h.id, p.pageKey(url));
           }
         })();
+        const slowHint = setTimeout(() => alertNote(box, "Still working — your Nostr signer may be asking for approval (check the extension icon)."), 2500);
         Promise.race([bg, new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 12000))])
-          .catch((e) => alertNote(box, "Removed here, but the synced copy may not be deleted yet (" + (e.message || e) + ") — approve the request in your signer, or delete again if it reappears."));
+          .then(() => { clearTimeout(slowHint); alertNote(box, "Deleted — including the synced copy."); })
+          .catch((e) => { clearTimeout(slowHint); alertNote(box, "Removed here, but the synced copy may not be deleted yet (" + (e.message || e) + ") — approve the request in your signer, or delete again if it reappears."); });
       });
       foot.appendChild(del);
       card.appendChild(foot);

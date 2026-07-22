@@ -47,8 +47,11 @@ export function npubShort(pubkey) {
 export async function restore() {
   const u = storedUser();
   if (!u) return null;
-  if (u.method === "nip07" && globalThis.nostr) {
-    signer = nip07Signer(u.pubkey);
+  if (u.method === "nip07") {
+    // Extensions can inject window.nostr AFTER our scripts run (common in
+    // Firefox) — poll briefly instead of silently ending up signer-less.
+    for (let i = 0; i < 10 && !globalThis.nostr; i++) await new Promise((r) => setTimeout(r, 300));
+    if (globalThis.nostr) signer = nip07Signer(u.pubkey);
   } else if (u.method === "nip46") {
     try { await reconnectBunker(u); } catch {}
   }
@@ -317,7 +320,8 @@ export async function deleteEvent(id) {
   if (!signer) {
     const u = storedUser();
     if (u?.method === "nip46") await reconnectBunker(u);
-    if (!signer) return;
+    else if (u?.method === "nip07" && globalThis.nostr) signer = nip07Signer(u.pubkey);
+    if (!signer) throw new Error("not-signed-in — reload the page and try again");
   }
   const tmpl = {
     kind: 5,
