@@ -15,6 +15,44 @@ let pubkyMod = null; // lazy-loaded ./pubky.js
 let user = null; // { method:'nip07'|'nip46'|'pubky', … }
 
 const $ = (sel, r = document) => r.querySelector(sel);
+
+// Reader-controlled auto-publish: when ON (default), a signed-in reader's new
+// highlights publish to their account as they're made (the highlighter.com sync
+// model). OFF = highlights stay on this device until published one by one.
+const AUTOSYNC_KEY = "tw:autosync";
+const autosync = () => { try { return localStorage.getItem(AUTOSYNC_KEY) !== "0"; } catch { return true; } };
+const setAutosync = (v) => { try { localStorage.setItem(AUTOSYNC_KEY, v ? "1" : "0"); } catch {} };
+
+const TIP_TEXT = "Published highlights use Nostr's highlight format (NIP-84, kind 9802) — any note you write travels inside the same event, not as a separate post. They go to public relays under your account, and apps that understand highlights (Amethyst, Highlighter) show them on your profile or feed. Pubky highlights save to your own homeserver instead. \u201cSuggest\u201d is different: it sends a regular public note (kind 1) to the wiki's editors. With auto-publish off, new highlights stay on this device until you press Publish.";
+function infoTip() {
+  const s = el("span", "tw-info");
+  s.tabIndex = 0;
+  s.setAttribute("role", "note");
+  s.setAttribute("aria-label", "About publishing");
+  s.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><path d="M12 11v6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="7.6" r="1.3" fill="currentColor"/></svg>`;
+  const tip = el("span", "tw-tip", TIP_TEXT);
+  s.appendChild(tip);
+  return s;
+}
+function toggleRow(label) {
+  const row = el("label", "tw-toggle-row");
+  const sw = el("span", "tw-switch");
+  const input = document.createElement("input");
+  input.type = "checkbox";
+  input.checked = autosync();
+  sw.appendChild(input); sw.appendChild(el("i"));
+  row.appendChild(sw);
+  row.appendChild(el("span", "tw-toggle-t", label));
+  row.appendChild(infoTip());
+  input.addEventListener("change", () => {
+    setAutosync(input.checked);
+    document.querySelectorAll('.tw-toggle-row input').forEach((i) => { i.checked = input.checked; });
+    toast(input.checked
+      ? "Auto-publish on — new highlights go to your account as you make them."
+      : "Auto-publish off — new highlights stay on this device until you press Publish.");
+  });
+  return row;
+}
 const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
 const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
 
@@ -117,7 +155,7 @@ async function makeHighlight(range) {
     setActive(hl.id);
     requestAnimationFrame(() => { const ta = $(`.tw-item[data-id="${hl.id}"] textarea`); ta && ta.focus(); });
   }
-  if (user && (await remoteReady())) publishOne(hl.id);
+  if (user && autosync() && (await remoteReady())) publishOne(hl.id);
 }
 
 // ── side panel ───────────────────────────────────────────────────────────
@@ -130,7 +168,7 @@ panel.innerHTML = `
   </div>
   <div class="tw-auth"></div>
   <div class="tw-list"></div>
-  <div class="tw-p-foot">Signed out, highlights and notes stay on this device — private. Signed in, they publish to your own Nostr or Pubky account as you make them — publicly, like posts. "Suggest" sends a note to the wiki's editors, also public.</div>`;
+  <div class="tw-p-foot">Signed out, highlights and notes stay on this device — private. Signed in, they publish to your own Nostr or Pubky account as you make them — publicly, like posts. "Suggest" sends a note to the wiki's editors, also public. The auto-publish toggle (when signed in) controls whether new highlights publish as you make them.</div>`;
 document.body.appendChild(panel);
 
 const fab = el("button", "tw-fab");
@@ -292,6 +330,7 @@ signinModal.innerHTML = `
   <div class="tw-dialog-panel" role="dialog" aria-modal="true">
     <h3 class="tw-dialog-t">Sign in to sync</h3>
     <p class="tw-dialog-d">Your highlights already save on this device, privately. Sign in to sync them across your devices — your keys, your data, no account with us. Synced highlights live on your own public account, like posts.</p>
+    <div class="tw-si-toggle"></div>
 
     <div class="tw-signin-sect">
       <div class="tw-signin-label">Nostr</div>
@@ -312,6 +351,7 @@ signinModal.innerHTML = `
     <div class="tw-dialog-actions"><button type="button" class="tw-dialog-cancel" data-siclose>Cancel</button></div>
   </div>`;
 document.body.appendChild(signinModal);
+signinModal.querySelector(".tw-si-toggle").appendChild(toggleRow("Auto-publish highlights once signed in"));
 function closeSignin() { signinModal.hidden = true; }
 signinModal.querySelectorAll("[data-siclose]").forEach((e) => e.addEventListener("click", closeSignin));
 signinModal.querySelectorAll("button[data-m]").forEach((b) => b.addEventListener("click", () => { closeSignin(); doLogin(b.dataset.m); }));
@@ -591,6 +631,7 @@ function renderAuth() {
   if (user) {
     const unpublished = list.filter((h) => h.source === "local").length;
     box.innerHTML = `<div class="tw-signed"><span class="dot on"></span>Signed in · <b>${userLabel()}</b></div>`;
+    box.appendChild(toggleRow("Auto-publish new highlights"));
     if (unpublished > 0) {
       const b = el("button", "tw-syncbtn", `Publish ${unpublished} to ${isPubky() ? "Pubky" : "Nostr"} (public)`);
       b.addEventListener("click", () => publishAll(b));
