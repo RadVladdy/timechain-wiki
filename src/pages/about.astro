@@ -1,0 +1,48 @@
+---
+import Base from "../layouts/Base.astro";
+import { getCollection } from "astro:content";
+const all = await getCollection("wiki");
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "AboutPage",
+  name: "About TimechainWiki",
+  url: new URL("/about", Astro.site).href,
+};
+---
+<Base title="About" description="What TimechainWiki is, how it's organized, and how to use it." jsonLd={jsonLd}>
+  <div class="learn"><div class="wrap">
+    <div class="lead">
+      <div class="kicker"><span class="eyebrow">TimechainWiki</span></div>
+      <h1>A free encyclopedia<br />for <span class="accent">understanding Bitcoin</span></h1>
+      <p class="lede">TimechainWiki is a public reference work — <strong>{all.length} entries</strong> covering Bitcoin's economics, history, technology, culture, and criticisms. No ads, no paywall, nothing for sale. A community resource, full stop.</p>
+    </div>
+    <div class="learn-body">
+      <section>
+        <h2>Why "timechain"?</h2>
+        <p>Before the world settled on "blockchain," Satoshi Nakamoto's original code described the data structure as a <strong>timechain</strong> — a chain of cryptographic timestamps. The older word names the deeper idea: an unforgeable record of <em>when</em>, secured by work.</p>
+      </section>
+      <section>
+        <h2>How it's organized</h2>
+        <p>Most Bitcoin resources are either a search box or a feed. This one is a <strong>structure</strong>: seven movements — from the monetary foundations, through the case for Bitcoin and the machine itself, to the analytical frameworks, practice, and the honest discourse around it — each opening onto sections, clusters, and entries. You can walk the argument end to end, or drop in anywhere via search (<span class="mono">⌘K</span>). Entries carry learning levels, cite their sources, and cross-link like a proper encyclopedia.</p>
+        <p>Bitcoin rewards that kind of structure because no single discipline contains it:</p>
+        <figure class="kb-fig">
+          <img src="/kb/anil-interdisciplinary.png" alt="Bitcoin is interdisciplinary — economics, networks, energy, game theory, mathematics, software" loading="lazy" />
+          <figcaption>Bitcoin is interdisciplinary — Illustration: <a href="https://x.com/anilpatel" rel="noopener">Anil Patel</a> · <a href="https://creativecommons.org/licenses/by-nc/4.0/" rel="license noopener">CC BY-NC 4.0</a></figcaption>
+        </figure>
+      </section>
+      <section>
+        <h2>Your highlights, your keys</h2>
+        <p>Select any passage to highlight it and take notes — no account needed; everything saves privately in your browser. Sign in with <a href="/learn/nostr">Nostr</a> or <a href="/learn/pubky">Pubky</a> and your highlights sync across devices via <strong>your own</strong> accounts — the wiki never holds your data. You can also <strong>suggest an edit</strong> on any passage; every suggestion is reviewed by hand before anything changes.</p>
+      </section>
+      <section>
+        <h2>Built for readers — human and machine</h2>
+        <p>Every page is plain, fast, static HTML. AI agents are explicitly welcome: the whole encyclopedia is indexed at <a href="/llms.txt">/llms.txt</a>, and every entry is also served as clean markdown (add <span class="mono">.md</span> to any entry's address).</p>
+      </section>
+      <section>
+        <h2>Who makes this</h2>
+        <p>TimechainWiki is built and maintained by <strong>RadVladdy</strong>, rendered from a hand-curated knowledge base built over years of study — every entry hand-written, every source read. Illustrations are credited under each figure and on the <a href="/credits">credits page</a>.</p>
+        <p>Reach the wiki on Nostr at <span class="mono">hello@timechain.wiki</span> — the same address takes Lightning zaps if you find this work useful.</p>
+      </section>
+    </div>
+  </div></div>
+</Base>
