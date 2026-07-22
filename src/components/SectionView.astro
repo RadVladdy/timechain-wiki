@@ -3,7 +3,7 @@
 // entries, each with learning level, plus the area's thinkers and sources. Cluster
 // data is parsed in sync-kb.py (src/lib/sections-data.json); thinkers/sources come
 // straight from note frontmatter.
-const { title, group, scope, summary, clusters = [], thinkers = [], sources = [] } = Astro.props;
+const { title, group, scope, summary, clusters = [], thinkers = [], sources = [], figure = null } = Astro.props;
 
 // Split a learning level like "Introductory → Foundational" into ordered chips.
 function levelChips(level) {
@@ -32,6 +32,13 @@ const entryCount = clusters.reduce((n, c) => n + c.entries.length, 0);
       {sources.length > 0 && <span><b>{sources.length}</b> sources</span>}
     </div>
   </header>
+
+  {figure && (
+    <figure class="kb-fig sec-fig">
+      <img src={figure.src} alt={figure.caption} loading="lazy" />
+      <figcaption>{figure.caption} — Illustration: <a href="https://x.com/anilpatel" rel="noopener">Anil Patel</a> · <a href="https://creativecommons.org/licenses/by-nc/4.0/" rel="license noopener">CC BY-NC 4.0</a></figcaption>
+    </figure>
+  )}
 
   {clusters.map((c, i) => (
     <section class="cluster">

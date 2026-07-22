@@ -407,3 +407,12 @@ body.tw-selecting .tw-fab{visibility:hidden}
   .gmap{margin-left:0}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+
+/* KB figures — the Anil Patel illustration set (dark slides get a dark mat so
+   they sit deliberately on both the parchment and ink themes) */
+.kb-fig{margin:26px 0;border:1px solid var(--line-soft);border-radius:12px;padding:14px;background:#0e1214}
+.kb-fig img{width:100%;height:auto;display:block;border-radius:6px}
+.kb-fig figcaption{margin-top:11px;font-family:var(--mono);font-size:11.5px;letter-spacing:.02em;color:#8b949a;line-height:1.55}
+.kb-fig figcaption a{color:var(--brass);text-decoration:none}
+.kb-fig figcaption a:hover{text-decoration:underline}
+.sec-fig{margin:22px 0 8px}

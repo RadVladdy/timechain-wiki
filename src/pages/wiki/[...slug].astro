@@ -18,6 +18,10 @@ const title = titles[entry.id] ?? entry.id;
 // A sub-MOC renders as the structured section walk-down (clusters → entries),
 // not as raw prose. Everything else renders as an article.
 const found = findSection(entry.id);
+// Curated section-masthead figures (site-layer; the KB sub-MOC stays untouched).
+const SECTION_FIGURES = {
+  "criticisms-of-bitcoin": { src: "/kb/anil-criticisms-map.png", caption: "Debunking Bitcoin criticisms: the taxonomy" },
+};
 const secData = sectionsData[entry.id];
 const isSection = d.type === "sub-MOC" && found && secData;
 
@@ -74,6 +78,7 @@ const jsonLd = {
       clusters={secData.clusters}
       thinkers={thinkers}
       sources={sources}
+      figure={SECTION_FIGURES[entry.id] ?? null}
     />
   ) : (
     <Fragment>

@@ -20,6 +20,29 @@ LIB = os.path.join(os.path.dirname(__file__), "src", "lib")
 EDITOR_RE = re.compile(r"^## Editor's Notes[ \t]*$", re.M)   # exact heading, not a prefix
 CALLOUT_RE = re.compile(r"(?m)^(>[ \t]*)\[!\w+\][-+]?[ \t]?")  # demote Obsidian callout markers
 
+# ── figures (Anil Patel set, CC BY-NC 4.0) ─────────────────────────────────
+# KB notes embed curated figures as ![[anil-<name>.png|Caption]]; assets live in
+# the KB's _assets/anil/. The sync copies each referenced image into public/kb/
+# and rewrites the embed as a credited <figure>. A missing asset fails the build.
+FIG_RE = re.compile(r"!\[\[(anil-[a-z0-9-]+\.(?:png|jpg))(?:\|([^\]]+))?\]\]")
+FIG_SRC = os.path.join(SRC, "_assets", "anil")
+FIG_DST = os.path.join(os.path.dirname(__file__), "public", "kb")
+FIG_CREDIT = ('Illustration: <a href="https://x.com/anilpatel" rel="noopener">Anil Patel</a> · '
+              '<a href="https://creativecommons.org/licenses/by-nc/4.0/" rel="license noopener">CC BY-NC 4.0</a>')
+
+
+def render_figures(txt, used, missing):
+    def sub(m):
+        fn, cap = m.group(1), (m.group(2) or "").strip()
+        if not os.path.exists(os.path.join(FIG_SRC, fn)):
+            missing.append(fn)
+        used.add(fn)
+        alt = (cap or fn).replace('"', "&quot;")
+        lead = f"{cap} — " if cap else ""
+        return (f'<figure class="kb-fig"><img src="/kb/{fn}" alt="{alt}" loading="lazy" />'
+                f"<figcaption>{lead}{FIG_CREDIT}</figcaption></figure>")
+    return FIG_RE.sub(sub, txt)
+
 
 def demote_callouts(txt):
     return CALLOUT_RE.sub(r"\1", txt)
@@ -204,6 +227,7 @@ def main():
              if not os.path.basename(f).startswith("_") and os.path.basename(f) != "CLAUDE.md"]
 
     slugs, copied, stripped, sources = {}, 0, 0, {}
+    fig_used, fig_missing = set(), []
     for f in sorted(files):
         base = os.path.basename(f)[:-3]
         slug = slugify(base)
@@ -214,8 +238,19 @@ def main():
         sources[slug] = txt
         out, did = strip_editor(txt)
         out = demote_callouts(out)
+        out = render_figures(out, fig_used, fig_missing)
         copied += 1; stripped += did
         open(os.path.join(DST, slug + ".md"), "w", encoding="utf-8").write(out)
+
+    # figures: copy the referenced assets into the site; a dangling embed is fatal
+    if fig_missing:
+        print(f"FIGURE GUARD FAILED — embedded but missing from _assets/anil: {sorted(set(fig_missing))}",
+              file=sys.stderr)
+        sys.exit(1)
+    os.makedirs(FIG_DST, exist_ok=True)
+    for fn in sorted(fig_used):
+        shutil.copy2(os.path.join(FIG_SRC, fn), os.path.join(FIG_DST, fn))
+    print(f"figures: {len(fig_used)} embedded + copied → public/kb/")
 
     # slug/title index for wikilink resolution + nav
     os.makedirs(LIB, exist_ok=True)

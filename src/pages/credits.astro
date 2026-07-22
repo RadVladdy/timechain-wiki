@@ -1,0 +1,29 @@
+---
+import Base from "../layouts/Base.astro";
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  name: "Credits",
+  url: new URL("/credits", Astro.site).href,
+};
+---
+<Base title="Credits" description="Illustration and content credits for TimechainWiki." jsonLd={jsonLd}>
+  <div class="learn"><div class="wrap">
+    <div class="lead">
+      <div class="kicker"><span class="eyebrow">TimechainWiki</span></div>
+      <h1>Credits</h1>
+      <p class="lede">TimechainWiki is a free community resource. Some of the best material on it was made by others — credited here, and under every figure where it appears.</p>
+    </div>
+    <div class="learn-body">
+      <section>
+        <h2>Illustrations — Anil Patel</h2>
+        <p>The infographics that appear throughout the encyclopedia are the work of <strong>Anil Patel</strong> (<a href="https://x.com/anilpatel" rel="noopener">@anilpatel</a>), from his collection <a href="https://anilsaidso.gumroad.com/l/vbtc" rel="noopener">Visualizing Bitcoin</a>, used under the <a href="https://creativecommons.org/licenses/by-nc/4.0/" rel="license noopener">CC BY-NC 4.0</a> license. Each figure carries its own credit line.</p>
+        <p>If his way of explaining Bitcoin clicks for you, go deeper: <a href="https://thebitcoinhandbook.com/" rel="noopener">The Bitcoin Handbook</a>, <a href="https://treasuryofsaylor.com/" rel="noopener">The Treasury of Michael Saylor</a>, and <a href="https://bitcoincourse.io/" rel="noopener">The Bitcoin Course</a>.</p>
+      </section>
+      <section>
+        <h2>Everything else</h2>
+        <p>The encyclopedia's text is original to TimechainWiki, written and hand-curated from primary sources. Sources for each entry are cited on the entry itself under "Canonical sources."</p>
+      </section>
+    </div>
+  </div></div>
+</Base>
