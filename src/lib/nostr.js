@@ -221,30 +221,33 @@ export async function privateSave(path, highlights) {
 }
 
 export async function privateFetch(path, ms = 3500) {
-  if (!signer?.dec44) return [];
+  if (!signer?.dec44) return null; // unknown — can't decrypt this session
   const evs = await Promise.race([
     pool.querySync(RELAYS, { kinds: [APPD_KIND], authors: [signer.pubkey], "#d": [dTag(path)] }),
-    new Promise((res) => setTimeout(() => res([]), ms)),
-  ]).catch(() => []);
-  if (!evs || !evs.length) return [];
+    new Promise((res) => setTimeout(() => res(null), ms)),
+  ]).catch(() => null);
+  if (evs === null) return null; // unknown — timeout
+  if (!evs.length) return [];    // genuinely no blob for this page
   const newest = evs.reduce((a, b) => (b.created_at > a.created_at ? b : a));
   try {
     const list = JSON.parse(await signer.dec44(signer.pubkey, newest.content));
     return list.map((h) => ({ ...h, source: "nostrp", published: true, pubkey: signer.pubkey }));
-  } catch { return []; }
+  } catch { return null; }       // unknown — decrypt failed
 }
 
 // Everything the signed-in reader has on Nostr for THIS wiki, across all pages —
 // public highlights (9802, r on our host) + private blobs (30078, d-prefix).
 export async function fetchAllMine(ms = 6000) {
-  if (!signer) return { pub: [], priv: [] };
-  const [pubEvs, privEvs] = await Promise.race([
+  if (!signer) return { pub: [], priv: [], ok: false };
+  const raced = await Promise.race([
     Promise.all([
       pool.querySync(RELAYS, { kinds: [9802], authors: [signer.pubkey] }),
       pool.querySync(RELAYS, { kinds: [APPD_KIND], authors: [signer.pubkey] }),
     ]),
-    new Promise((res) => setTimeout(() => res([[], []]), ms)),
-  ]).catch(() => [[], []]);
+    new Promise((res) => setTimeout(() => res(null), ms)),
+  ]).catch(() => null);
+  if (raced === null) return { pub: [], priv: [], ok: false };
+  const [pubEvs, privEvs] = raced;
   const pub = (pubEvs || [])
     .filter((e) => ((e.tags.find((x) => x[0] === "r") || [])[1] || "").startsWith(CANON))
     .map((e) => {
@@ -276,7 +279,7 @@ export async function fetchAllMine(ms = 6000) {
       } catch {}
     }
   }
-  return { pub, priv };
+  return { pub, priv, ok: true };
 }
 
 // Private suggestion: a NIP-17 gift-wrapped DM to the Suggestions inbox. The
@@ -357,8 +360,9 @@ export async function fetch(pubkey, path, ms = 8000) {
   const filter = { kinds: [9802], authors: [pubkey], "#r": [canonUrl(path)] };
   const events = await Promise.race([
     pool.querySync(RELAYS, filter),
-    new Promise((res) => setTimeout(() => res([]), ms)),
-  ]).catch(() => []);
+    new Promise((res) => setTimeout(() => res(null), ms)),
+  ]).catch(() => null);
+  if (events === null) return null; // unknown — relays didn't answer in time
   return events.map((e) => {
     const t = (k) => (e.tags.find((x) => x[0] === k) || [])[1];
     return {

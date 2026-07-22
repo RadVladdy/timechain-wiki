@@ -53,7 +53,17 @@ export async function renderAllHighlights() {
       backend = "nostr";
       const n = await import("./nostr.js");
       await n.restore();
-      const { pub, priv } = await n.fetchAllMine();
+      const { pub, priv, ok } = await n.fetchAllMine();
+      if (ok) {
+        // prune ghosts: local copies of synced highlights the relays no longer have
+        const live = new Set([...pub, ...priv].map((h) => h.id));
+        for (const [id, h] of [...byId]) {
+          if ((h.source === "nostr" || h.source === "nostrp") && !live.has(id)) {
+            byId.delete(id);
+            localRemove(h.url, id);
+          }
+        }
+      }
       for (const h of [...pub, ...priv]) if (!byId.has(h.id)) byId.set(h.id, h);
     } else {
       sessionNote = "Showing this device only — sign in on any article to include your synced highlights.";

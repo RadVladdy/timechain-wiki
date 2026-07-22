@@ -835,10 +835,22 @@ async function syncRemote() {
     else {
       const n = await nlib();
       const pub = await n.fetch(user.pubkey, store.pageUrl());
-      const priv = n.canEncrypt() ? await n.privateFetch(store.pageUrl()) : [];
+      const priv = n.canEncrypt() ? await n.privateFetch(store.pageUrl()) : null;
       incoming = [...(pub || []), ...(priv || [])];
+      // Self-clean ghosts: a local copy of a synced highlight that the relays no
+      // longer return was deleted elsewhere — prune it. Only when the fetch
+      // actually answered (null = unknown → never prune on a flaky connection).
+      const prune = (source, fetched) => {
+        if (fetched === null) return;
+        const ids = new Set(fetched.map((h) => h.id));
+        for (const h of store.all().filter((x) => x.source === source && !ids.has(x.id))) store.remove(h.id);
+      };
+      prune("nostr", pub);
+      prune("nostrp", priv);
+      list = store.all();
     }
-    if (incoming && incoming.length) { list = store.merge(incoming); paint(); renderPanel(); }
+    if (incoming && incoming.length) list = store.merge(incoming);
+    paint(); renderPanel();
     tryDeepLink();
   } catch {}
 }
