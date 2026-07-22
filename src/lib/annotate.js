@@ -123,6 +123,18 @@ function paint() {
 let activeId = null;
 function setActive(id) { activeId = id; paint(); renderPanel(); }
 
+// pending deep-link target (#twhl=<id>) — resolved opportunistically as data arrives
+let deepLinkId = null, deepLinkUntil = 0;
+function tryDeepLink() {
+  if (!deepLinkId) return true;
+  if (ranges.has(deepLinkId)) {
+    const id = deepLinkId; deepLinkId = null;
+    openPanel(); scrollTo(id);
+    return true;
+  }
+  return false;
+}
+
 // ── selection popover ───────────────────────────────────────────────────────
 const pop = el("div", "tw-pop");
 pop.hidden = true;
@@ -802,6 +814,7 @@ async function syncRemote() {
       incoming = [...(pub || []), ...(priv || [])];
     }
     if (incoming && incoming.length) { list = store.merge(incoming); paint(); renderPanel(); }
+    tryDeepLink();
   } catch {}
 }
 
@@ -880,12 +893,29 @@ export async function init() {
 
   window.addEventListener("resize", debounce(() => { paint(); positionFab(); }, 150));
 
-  // Deep link from /highlights: #twhl=<id> → activate + scroll once resolvable.
+  // Deep link from /highlights: #twhl=<id> → activate + scroll. The highlight
+  // may only exist remotely (private blob / relay), and decryption through a
+  // remote signer (Amber) can take a while — so retry after every sync pass,
+  // keep a long patience window, and NEVER fail silently.
   const wanted = (location.hash.match(/^#twhl=(.+)$/) || [])[1];
   if (wanted) {
-    const id = decodeURIComponent(wanted);
-    const tryJump = () => { if (ranges.has(id)) { openPanel(); scrollTo(id); return true; } return false; };
-    if (!tryJump()) { let n = 0; const iv = setInterval(() => { if (tryJump() || ++n > 20) clearInterval(iv); }, 400); }
+    deepLinkId = decodeURIComponent(wanted);
+    deepLinkUntil = Date.now() + 45000;
+    tryDeepLink();
+    let n = 0;
+    const iv = setInterval(() => {
+      if (tryDeepLink() || Date.now() > deepLinkUntil) {
+        clearInterval(iv);
+        if (deepLinkId && Date.now() > deepLinkUntil) {
+          const inList = list.some((h) => h.id === deepLinkId);
+          toast(inList
+            ? "Found the highlight, but couldn't locate its exact text on the page — it's shown in the panel."
+            : "Couldn't load that highlight here yet — if it's synced, give it a moment or check you're signed in.", true);
+          if (inList) { openPanel(); setActive(deepLinkId); }
+          deepLinkId = null;
+        }
+      }
+    }, 500);
   }
 
   // If a session restored, pull this page's highlights from the sync backend.
