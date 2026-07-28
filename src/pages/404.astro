@@ -1,0 +1,34 @@
+---
+// Without this page Cloudflare Pages had no 404 to serve, so every unmatched
+// URL returned the homepage with HTTP 200 — a soft 404. Two consequences:
+// crawlers requesting /favicon.ico got HTML with a success code (which is why
+// Google showed a generic globe instead of the mark), and any mistyped or stale
+// URL looked like a real page, inviting endless homepage duplicates into the
+// index. Astro emits this as 404.html, which Pages serves with a true 404.
+import Base from "../layouts/Base.astro";
+---
+
+<Base
+  title="Page not found"
+  description="That page doesn't exist on TimechainWiki."
+>
+  <div class="learn"><div class="wrap">
+    <div class="lead">
+      <div class="kicker"><span class="eyebrow">404</span></div>
+      <h1>That page doesn't exist</h1>
+      <p class="lede">
+        The link may be out of date, or the address slightly off. The
+        encyclopedia is fully browsable from the front page, and search
+        (<kbd>⌘K</kbd> or <kbd>Ctrl&nbsp;K</kbd>) will find any entry by name.
+      </p>
+    </div>
+    <div class="learn-body">
+      <section>
+        <p>
+          <a href="/">Return to the front page</a> &middot;
+          <a href="/about">About TimechainWiki</a>
+        </p>
+      </section>
+    </div>
+  </div></div>
+</Base>

@@ -32,6 +32,10 @@ const ogImage = new URL("/brand/banner.png", Astro.site);
     <meta name="twitter:description" content={description} />
     <meta name="twitter:image" content={ogImage} />
     {jsonLd && <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />}
+    <!-- Crawlers fetch /favicon.ico by convention regardless of these tags, so
+         a real .ico lives there too — declared here for browsers that prefer an
+         explicit reference. -->
+    <link rel="icon" href="/favicon.ico" sizes="any" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png?v=2" />
     <link rel="icon" type="image/png" sizes="512x512" href="/favicon-512.png?v=2" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=2" />
