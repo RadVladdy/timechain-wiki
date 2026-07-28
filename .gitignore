@@ -6,3 +6,7 @@ src/lib/wiki-index.json
 src/lib/sections-data.json
 .wrangler/
 .DS_Store
+
+# local cron output
+nightly.log
+poller.log
