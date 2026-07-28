@@ -68,7 +68,7 @@ Illustrations by **Anil Patel**, used with credit under
 [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/). Per-figure
 attribution and the full list are at [/credits](https://timechain.wiki/credits).
 
-## A note on the branches
+## History
 
-`main` holds the original coming-soon placeholder from before launch and is kept
-only as history. **This branch is the live site.**
+The pre-launch coming-soon placeholder that used to occupy `main` is preserved
+at the tag [`archive/coming-soon-2026-07`](https://github.com/RadVladdy/timechain-wiki/tree/archive/coming-soon-2026-07).
