@@ -68,7 +68,9 @@ Illustrations by **Anil Patel**, used with credit under
 [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/). Per-figure
 attribution and the full list are at [/credits](https://timechain.wiki/credits).
 
-## History
+## A note on the branches
 
-The pre-launch coming-soon placeholder that used to occupy `main` is preserved
-at the tag [`archive/coming-soon-2026-07`](https://github.com/RadVladdy/timechain-wiki/tree/archive/coming-soon-2026-07).
+**This branch — `astro-build` — is the live site**, and is the repository
+default. `main` still holds the pre-launch coming-soon placeholder and is kept
+only as history; it is also tagged
+[`archive/coming-soon-2026-07`](https://github.com/RadVladdy/timechain-wiki/releases/tag/archive%2Fcoming-soon-2026-07).
