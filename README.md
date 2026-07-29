@@ -70,7 +70,9 @@ attribution and the full list are at [/credits](https://timechain.wiki/credits).
 
 ## A note on the branches
 
-**This branch — `astro-build` — is the live site**, and is the repository
-default. `main` still holds the pre-launch coming-soon placeholder and is kept
-only as history; it is also tagged
+**`main` is the live site, and it is the only branch.** The pre-launch
+coming-soon placeholder that used to live on `main` was retired at the
+2026-07-29 consolidation; its history is preserved at the tag
 [`archive/coming-soon-2026-07`](https://github.com/RadVladdy/timechain-wiki/releases/tag/archive%2Fcoming-soon-2026-07).
+The former `astro-build` branch was renamed to `main` and no longer exists —
+GitHub redirects old links to it.
