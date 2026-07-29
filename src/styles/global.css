@@ -49,7 +49,20 @@ a{color:inherit}
 /* top bar */
 .topbar{position:sticky;top:0;z-index:40;background:color-mix(in srgb,var(--ground) 88%,transparent);backdrop-filter:blur(10px);border-bottom:1px solid var(--line-soft)}
 .topbar .row{display:flex;align-items:center;gap:18px;height:60px}
-.brand{display:flex;align-items:center;gap:8px;font-family:var(--serif);font-weight:600;font-size:19px;text-decoration:none}
+/* The brand is the only elastic thing in the row, so it must be the thing that
+   gives. Without min-width:0 it holds its full width and pushes the buttons off
+   the right edge, where body's overflow-x:hidden silently swallows them. The
+   ellipsis is a last-resort safety net for large system text sizes only — at
+   360px the row is otherwise at ~98% capacity with no margin at all. */
+.brand{display:flex;align-items:center;gap:8px;min-width:0;font-family:var(--serif);font-weight:600;font-size:19px;text-decoration:none}
+.brand .wm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* Buy the wordmark breathing room on phones rather than truncating it: at 360px
+   the row otherwise fits with ~6px to spare, so any text scaling clips it. */
+@media (max-width:420px){.brand{font-size:17px}}
+/* Below that even the shrunk wordmark can't fit beside the three controls, and
+   the 30px mark carrying the brand alone reads as deliberate where a clipped
+   "Timechain W…" reads as broken. */
+@media (max-width:340px){.brand .wm{display:none}}
 .brand .t{color:var(--ink)} .brand .w{color:var(--brass)}
 .brandlogo{width:30px;height:30px;object-fit:contain;flex:none}
 /* light logo in light mode, dark logo in dark mode — mirrors the token cascade */
@@ -58,7 +71,7 @@ a{color:inherit}
 :root[data-theme="light"] .brandlogo.l{display:block} :root[data-theme="light"] .brandlogo.d{display:none}
 :root[data-theme="dark"] .brandlogo.l{display:none} :root[data-theme="dark"] .brandlogo.d{display:block}
 .spacer{flex:1}
-.chip{display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:12px;padding:6px 11px;border:1px solid var(--line);border-radius:999px;color:var(--ink-soft);background:var(--surface);cursor:pointer;transition:.2s}
+.chip{display:inline-flex;align-items:center;gap:7px;flex:none;font-family:var(--mono);font-size:12px;padding:6px 11px;border:1px solid var(--line);border-radius:999px;color:var(--ink-soft);background:var(--surface);cursor:pointer;transition:.2s}
 .chip:hover{border-color:var(--brass);color:var(--ink)}
 .chip .dot{width:7px;height:7px;border-radius:50%;background:var(--sage);box-shadow:0 0 0 3px color-mix(in srgb,var(--sage) 22%,transparent)}
 .iconbtn{width:38px;height:38px;display:grid;place-items:center;border:1px solid var(--line);border-radius:50%;background:var(--surface);color:var(--ink-soft);cursor:pointer;transition:.2s;flex:none}
@@ -140,9 +153,15 @@ a{color:inherit}
 .modal-panel{position:relative;width:100%;max-width:600px;background:var(--raise);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);overflow:hidden;animation:pop .16s ease}
 @keyframes pop{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
 .search-in{display:flex;align-items:center;gap:12px;padding:15px 17px;border-bottom:1px solid var(--line)}
-.search-in input{flex:1;background:none;border:0;outline:none;color:var(--ink);font-family:var(--serif);font-size:19px}
+/* min-width:0 is load-bearing: an <input> carries an intrinsic min width from its
+   `size` attribute, so with the default min-width:auto it refuses to shrink and
+   shoves the esc badge out through the panel's overflow:hidden edge — which is
+   exactly what happens on Android, where the fallback serif runs wider and the
+   system text-size setting scales everything up. */
+.search-in input{flex:1;min-width:0;background:none;border:0;outline:none;color:var(--ink);font-family:var(--serif);font-size:19px}
 .search-in input::placeholder{color:var(--ink-faint)}
-.search-in .kbd{font-family:var(--mono);font-size:11px;border:1px solid var(--line);border-radius:6px;padding:3px 7px;color:var(--ink-faint);cursor:pointer}
+.search-in .kbd{flex:none;font-family:var(--mono);font-size:11px;border:1px solid var(--line);border-radius:6px;padding:3px 7px;color:var(--ink-faint);cursor:pointer}
+.search-in svg{flex:none}
 .search-results{max-height:min(56vh,440px);overflow-y:auto;padding:8px}
 .search-hint{color:var(--ink-faint);font-size:13.5px;padding:18px 12px;margin:0;text-align:center}
 .sr{display:block;padding:11px 13px;border-radius:10px;text-decoration:none;color:inherit;border:1px solid transparent}
@@ -165,7 +184,9 @@ a{color:inherit}
 .glabel{font-family:var(--serif);font-size:clamp(20px,2.6vw,26px);font-weight:600;letter-spacing:-.01em}
 .gblurb{color:var(--ink-soft);font-size:14px;margin-top:4px;max-width:60ch}
 .gmap{margin-left:64px;display:flex;flex-direction:column;gap:9px}
-.node{display:grid;grid-template-columns:1fr auto;align-items:center;gap:18px;padding:15px 18px;background:var(--surface);border:1px solid var(--line-soft);border-radius:13px;text-decoration:none;color:inherit;transition:border-color .16s,transform .16s;position:relative;overflow:hidden}
+/* minmax(0,1fr), not 1fr: a plain 1fr track floors at its content's min width, so
+   a long title squeezes the "N notes →" column out through the overflow:hidden edge */
+.node{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:18px;padding:15px 18px;background:var(--surface);border:1px solid var(--line-soft);border-radius:13px;text-decoration:none;color:inherit;transition:border-color .16s,transform .16s;position:relative;overflow:hidden}
 .node::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--slate);opacity:.55;transition:opacity .16s}
 .node:hover{border-color:var(--brass);transform:translateY(-1px)}
 .node:hover::before{opacity:1;background:var(--orange)}
@@ -202,7 +223,9 @@ a{color:inherit}
 .tagrow span{font-size:11.5px;font-family:var(--mono);color:var(--ink-soft);background:var(--surface);border:1px solid var(--line-soft);border-radius:6px;padding:3px 8px}
 
 /* prose */
-.prose{font-family:var(--serif);font-size:17px;line-height:1.72;color:var(--ink)}
+/* Long unbreakable tokens — txids, bare URLs — otherwise run off the right edge
+   and get swallowed by body's overflow-x:hidden, unreadable and unscrollable. */
+.prose{font-family:var(--serif);font-size:17px;line-height:1.72;color:var(--ink);overflow-wrap:break-word}
 .prose > *:first-child{margin-top:0}
 .prose p{margin:0 0 16px}
 /* leading blockquote = the note's abstract → render as a standfirst, not a quote */
@@ -219,10 +242,14 @@ a{color:inherit}
 .prose hr{border:0;border-top:1px solid var(--line);margin:32px 0}
 .prose blockquote{margin:0 0 18px;padding:14px 18px;background:var(--surface);border-left:3px solid var(--brass);border-radius:0 9px 9px 0;color:var(--ink)}
 .prose blockquote p:last-child{margin-bottom:0}
-.prose code{font-family:var(--mono);font-size:.86em;background:var(--surface);border:1px solid var(--line-soft);border-radius:5px;padding:.08em .35em}
+/* anywhere, not break-word: a 64-char txid has no break opportunity at all, so
+   break-word alone still lets it overflow */
+.prose code{font-family:var(--mono);font-size:.86em;background:var(--surface);border:1px solid var(--line-soft);border-radius:5px;padding:.08em .35em;overflow-wrap:anywhere}
 .prose pre{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px;overflow-x:auto}
-.prose pre code{background:none;border:0;padding:0}
-.prose a{color:var(--brass);text-decoration:none;border-bottom:1px solid color-mix(in srgb,var(--brass) 35%,transparent)}
+/* code blocks keep their own horizontal scroll — wrapping would wreck alignment
+   in the ASCII diagrams, so opt them back out of the inline-code break rule */
+.prose pre code{background:none;border:0;padding:0;overflow-wrap:normal}
+.prose a{color:var(--brass);text-decoration:none;border-bottom:1px solid color-mix(in srgb,var(--brass) 35%,transparent);overflow-wrap:anywhere}
 .prose a:hover{border-bottom-color:var(--brass)}
 .prose a.wl-new{color:var(--ink-faint);border-bottom:1px dashed var(--line);cursor:help}
 .prose table{width:100%;border-collapse:collapse;font-family:var(--sans);font-size:14px;margin:0 0 18px;display:block;overflow-x:auto}
