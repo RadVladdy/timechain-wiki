@@ -10,3 +10,6 @@ src/lib/sections-data.json
 # local cron output
 nightly.log
 poller.log
+
+# machine-local KB path for sync-kb.py (never commit an absolute home path)
+.kb-path

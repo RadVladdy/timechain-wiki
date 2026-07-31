@@ -13,7 +13,18 @@ it is parsed here in the deterministic sync layer rather than hand-maintained.
 """
 import glob, os, re, shutil, sys, json
 
-SRC = "/home/radvladdy/Obsidian/Obsidian_RadVladdy/30-Knowledge/Bitcoin"
+# The KB lives outside this repo and its location is machine-local, so it is NOT
+# hardcoded here — an absolute path in a public repo publishes the author's
+# directory layout. Set TIMECHAIN_KB, or drop a one-line path in .kb-path (both
+# untracked). Fails loudly rather than silently syncing nothing.
+SRC = os.environ.get("TIMECHAIN_KB") or ""
+if not SRC:
+    _cfg = os.path.join(os.path.dirname(__file__), ".kb-path")
+    if os.path.exists(_cfg):
+        SRC = open(_cfg).read().strip()
+if not SRC or not os.path.isdir(SRC):
+    sys.exit("sync-kb: set TIMECHAIN_KB (or write the KB path into .kb-path) — "
+             f"got {SRC!r}, which is not a directory.")
 DST = os.path.join(os.path.dirname(__file__), "src", "content", "wiki")
 LIB = os.path.join(os.path.dirname(__file__), "src", "lib")
 

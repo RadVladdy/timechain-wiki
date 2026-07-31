@@ -323,9 +323,14 @@ body.tw-selecting .tw-fab{visibility:hidden}
 .tw-fab-n:empty{display:none}
 
 .tw-panel{position:fixed;top:0;right:0;bottom:0;z-index:85;width:min(390px,92vw);background:var(--surface);border-left:1px solid var(--line);box-shadow:var(--shadow);display:flex;flex-direction:column;animation:slidein .2s ease}
-/* `display:flex/inline-flex/none` above override the UA [hidden] rule, so hidden
-   would never actually hide these — restore it at higher specificity. */
-.tw-panel[hidden],.tw-fab[hidden],.tw-authmenu[hidden]{display:none}
+/* An author `display:` rule of ANY value beats the user agent's [hidden] rule, so
+   an element that sets display and is toggled via .hidden renders anyway — as an
+   empty box, or as its own margins' worth of dead space. Every class in this file
+   that sets `display:` AND is toggled with `hidden` must be listed here. Adding a
+   `display:` to a toggled class without adding it below is the bug.
+     .tw-cf-choice was missed and shipped: askConfirm() sets box.hidden = !choice,
+     so every confirm dialog without a choice list carried 18px of dead space. */
+.tw-panel[hidden],.tw-fab[hidden],.tw-authmenu[hidden],.tw-cf-choice[hidden]{display:none}
 @keyframes slidein{from{transform:translateX(100%)}to{transform:none}}
 .tw-p-head{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid var(--line)}
 .tw-p-head b{font-family:var(--serif);font-size:18px;font-weight:600}

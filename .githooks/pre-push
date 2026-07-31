@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Pre-push gate. Runs every check-*.py in scripts/ and refuses the push if any fails.
+#
+# This hook is TRACKED (core.hooksPath=.githooks) so it survives a fresh clone.
+# An untracked .git/hooks/ hook exists only on the box that wrote it, which is how
+# a gate quietly stops existing.
+#
+# What this gate does NOT prove: that a page works. It reads source and the last
+# build on disk. A missing import inside a client <script> and an author `display:`
+# beating [hidden] both build green and fail only in a browser. Drive the page.
+set -uo pipefail
+cd "$(git rev-parse --show-toplevel)"
+
+fail=0
+shopt -s nullglob
+for check in scripts/check-*.py; do
+  echo "── $check"
+  if ! python3 "$check"; then fail=1; fi
+done
+
+if [ "$fail" -ne 0 ]; then
+  echo
+  echo "!! PUSH BLOCKED — a check above failed."
+  echo "   Override only with a reason you would write down: git push --no-verify"
+  exit 1
+fi
+echo "── pre-push: all checks clean"

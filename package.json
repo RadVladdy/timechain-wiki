@@ -7,7 +7,8 @@
     "sync": "python3 sync-kb.py",
     "dev": "astro dev",
     "build": "npm run sync && astro build && pagefind --site dist",
-    "preview": "astro preview"
+    "preview": "astro preview",
+    "prepare": "git config core.hooksPath .githooks"
   },
   "dependencies": {
     "@astrojs/sitemap": "^3.7.3",
