@@ -30,6 +30,10 @@ block, as `//` comments. Those are compiled away and never ship.
 
 Usage:  python3 scripts/check-pseudonymity.py     (exits non-zero on a finding)
         --warn-only   report §4 narrative hits without failing the build
+        --stdin       scan text on stdin instead of the repo, using THIS repo's
+                      identifier list and allowlist. Lets an outside caller (the
+                      nightly sweep, checking commit messages) reuse the tuned
+                      per-site config instead of keeping a second copy that drifts.
 """
 import re
 import sys
@@ -146,6 +150,18 @@ def walk(root, exts):
         if p.is_file() and p.suffix in exts and p.stat().st_size < 5_000_000:
             yield p
 
+
+# --stdin: same identifiers, same allowlist, arbitrary text. Report and exit.
+if '--stdin' in sys.argv:
+    _t = sys.stdin.read()
+    _hits = [f'    {_t[max(0, s - 80):e + 60].strip()}' for _k, s, e in scan(_t)]
+    if not NAMES_FILE.exists():
+        print(f'DEGRADED: {NAMES_FILE} missing'); sys.exit(2)
+    if _hits:
+        print(f'{len(_hits)} identifier hit(s) in the supplied text:')
+        print('\n'.join(_hits))
+        sys.exit(1)
+    sys.exit(0)
 
 fails, warns = [], []
 repo = pathlib.Path(__file__).resolve().parent.parent
