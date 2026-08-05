@@ -1,24 +1,22 @@
 #!/usr/bin/env bash
 # Deploy timechain.wiki to Cloudflare. Run via: npm run deploy
 #
-# ONE PATTERN across every site repo. Same command name, same token handling,
-# same shape, so there is one thing to fix rather than four. Exactly two things
-# differ per repo and both are named right here:
+# ONE PATTERN across every site repo. Same command name, same token, same file,
+# so there is one thing to fix rather than four. Only the deploy command itself
+# differs, according to what this site IS — here, a Pages direct upload to the
+# project `timechain-wiki`.
 #
-#   TARGET      — a Worker (wrangler deploy) or a Pages direct upload
-#   TOKEN_FILE  — the credential that target type actually accepts
+# THE TOKEN IS THE SAME IN ALL FOUR REPOS and that is deliberate. Until
+# 2026-08-05 there were two half-scoped Cloudflare tokens, one that could deploy
+# Pages and one that could deploy Workers, so the correct credential depended on
+# what a repo shipped to. Copying a sibling repo's token line then produced a
+# deploy that could never authenticate (`Authentication error [code: 10000]`) —
+# and it stayed invisible because every deploy happened to run with a working
+# token already exported in the environment, so the fallback below was never once
+# the path that actually ran. One token with both scopes removes the whole class.
 #
-# WHY THE TOKEN FILE IS NOT THE SAME EVERYWHERE. A Pages-scoped token cannot
-# deploy a Worker — wrangler fails with `Authentication error [code: 10000]` —
-# and the two token files here are scoped differently. Copying another repo's
-# line without checking what this repo deploys to is a real bug that shipped
-# once already, and it stayed invisible because every deploy happened to run
-# with a working token already in the environment, so the fallback below was
-# never the path that ran. If this file is ever edited, test it the way it is
-# actually broken: run with CLOUDFLARE_API_TOKEN explicitly unset.
-#
-# This site is a PAGES DIRECT UPLOAD (project `timechain-wiki`), so the
-# Pages-scoped token is the correct one.
+# If this file is ever edited, test it the way it actually breaks: run it with
+# CLOUDFLARE_API_TOKEN explicitly unset, so the fallback IS the path that runs.
 #
 # THIS SITE HAS A SANCTIONED NIGHTLY DEPLOY, which is a deliberate exception to
 # "deploying is always a manual act": its content is generated from the Bitcoin
@@ -30,7 +28,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-TOKEN_FILE="$HOME/secure/cloudflare-pages-token"
+TOKEN_FILE="$HOME/secure/cloudflare-deploy-token"
 
 if [ -z "${CLOUDFLARE_API_TOKEN:-}" ]; then
   if [ -f "$TOKEN_FILE" ]; then
