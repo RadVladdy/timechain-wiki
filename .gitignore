@@ -13,3 +13,5 @@ poller.log
 
 # machine-local KB path for sync-kb.py (never commit an absolute home path)
 .kb-path
+
+__pycache__/

@@ -152,14 +152,36 @@ def walk(root, exts):
 
 
 # --stdin: same identifiers, same allowlist, arbitrary text. Report and exit.
+# --stdin: same identifiers, same allowlist, same narrative patterns, arbitrary
+# text. The caller supplies prose that is not a file in this repo — a commit
+# message being the case this exists for.
+#
+# It applies §4 as well as the identifier scan, and that is the point rather than
+# a convenience: the 13 commit messages this mode was written to catch name a
+# person AND narrate a session, and several would have been caught by only one of
+# the two. Prose is scanned whole here, not comment-by-comment — a commit message
+# is all comment.
+#
+# Tiering matches the file scan exactly, so there is one policy and not two:
+# an identifier or a NARRATIVE_FAIL shape exits 1; the softer shapes print and
+# exit 0. Anything stricter here would be a rule that exists only for commit
+# messages, and a rule that lives in one place drifts from the one it copied.
 if '--stdin' in sys.argv:
     _t = sys.stdin.read()
-    _hits = [f'    {_t[max(0, s - 80):e + 60].strip()}' for _k, s, e in scan(_t)]
+    _hits = [f'    …{ctx(_t, s, e)}…' for _k, s, e in scan(_t)]
+    _narr, _soft = [], []
+    for _pat, _why in NARRATIVE:
+        for _m in re.finditer(_pat, _t, re.I):
+            _line = f'    [{_why}] …{ctx(_t, _m.start(), _m.end())}…'
+            (_narr if FAIL_RE.search(_m.group(0)) else _soft).append(_line)
     if not NAMES_FILE.exists():
         print(f'DEGRADED: {NAMES_FILE} missing'); sys.exit(2)
-    if _hits:
-        print(f'{len(_hits)} identifier hit(s) in the supplied text:')
-        print('\n'.join(_hits))
+    for _line in _soft:
+        print(f'  -- narrates rather than states a constraint:\n  {_line}')
+    if _hits or _narr:
+        print(f'{len(_hits)} identifier hit(s), {len(_narr)} narrative hit(s) '
+              'in the supplied text:')
+        print('\n'.join(_hits + _narr))
         sys.exit(1)
     sys.exit(0)
 

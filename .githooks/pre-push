@@ -8,8 +8,28 @@
 # What this gate does NOT prove: that a page works. It reads source and the last
 # build on disk. A missing import inside a client <script> and an author `display:`
 # beating [hidden] both build green and fail only in a browser. Drive the page.
+#
+# It reads git's ref-update lines on stdin to work out the exact commits this push
+# would publish, and exports them as BK_PUSH_COMMITS for check-commit-messages.py.
+# The hook is the only place that knows the remote's current sha, so the range has
+# to be computed here rather than guessed by the script.
 set -uo pipefail
 cd "$(git rev-parse --show-toplevel)"
+
+ZERO=0000000000000000000000000000000000000000
+push_commits=""
+while read -r _local_ref local_sha _remote_ref remote_sha; do
+  [ "$local_sha" = "$ZERO" ] && continue          # deleting a ref publishes nothing
+  if [ "$remote_sha" = "$ZERO" ]; then
+    # New remote branch: judge it on commits that are not already on some remote,
+    # not on everything reachable — otherwise a new branch re-litigates all history.
+    range=$(git rev-list "$local_sha" --not --remotes)
+  else
+    range=$(git rev-list "$remote_sha..$local_sha")
+  fi
+  push_commits="$push_commits $range"
+done
+export BK_PUSH_COMMITS="$push_commits"
 
 fail=0
 shopt -s nullglob
