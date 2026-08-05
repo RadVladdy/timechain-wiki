@@ -1,9 +1,13 @@
 #!/bin/bash
-# TimechainWiki nightly rebuild+deploy: re-syncs the Bitcoin KB into the live
-# site (leak-guard fails the build on any internal-content leak, so a bad sync
-# can never ship). Deploys ONLY if the build succeeds.
+# TimechainWiki nightly rebuild+deploy (cron 04:25): re-syncs the Bitcoin KB into
+# the live site. The build's leak-guard fails on any internal-content leak, so a
+# bad sync can never ship. Deploys ONLY if the build succeeds.
+#
+# The deploy itself is delegated to scripts/deploy.sh — the same script
+# `npm run deploy` runs — so the automated path and the manual path can never
+# drift into two different implementations with two different token handlers.
 set -e
 cd "$HOME/dev/timechain-wiki-astro"
 npm run build
-CLOUDFLARE_API_TOKEN=$(cat "$HOME/secure/cloudflare-pages-token") npx wrangler pages deploy dist --project-name=timechain-wiki --commit-dirty=true
+bash scripts/deploy.sh
 echo "[$(date -Is)] nightly deploy OK"

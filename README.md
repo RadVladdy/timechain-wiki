@@ -52,15 +52,25 @@ npm run dev
 
 ## Deploy
 
-**Manual, via Wrangler direct upload — there is no git integration.** Pushing to
-this repository does *not* deploy anything.
+**Wrangler direct upload — there is no git integration.** Pushing to this
+repository does *not* deploy anything. One command, the same one in every site
+repo:
 
 ```
-npx wrangler pages deploy dist --project-name=timechain-wiki
+npm run deploy
 ```
 
-A nightly job rebuilds the site from the knowledge base and deploys only if the
-build is green, so content edits go live within a day without a manual step.
+That builds, then runs `scripts/deploy.sh`, which sources the Cloudflare token
+itself. This site is a **Pages** project (`timechain-wiki`), so the script uses
+the Pages-scoped token.
+
+**The nightly is the sanctioned exception to "deploying is a manual act."** This
+site's content is generated from the Bitcoin KB, so it has to be able to go live
+without a person: `nightly-deploy.sh` (cron 04:25) rebuilds and then calls the
+**same** `scripts/deploy.sh`, so the automated and manual paths are one
+implementation rather than two that drift. The build's leak-guard fails the build
+on any internal-content leak, and the deploy only runs if the build succeeds — so
+a bad sync cannot ship.
 
 ## Credits
 
