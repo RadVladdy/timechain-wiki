@@ -59,7 +59,7 @@ EXCLUDE_PATHS = ['dist/pagefind/']
 # The names to look for are NOT stored in this repo — that would put the very
 # string we are trying to keep out of it back into it, in the file whose whole job
 # is to keep it out. They live in one untracked local file shared by every site,
-# one pattern per line:
+# one literal identifier per line:
 #
 #     ~/.config/pseudonymity-identifiers.txt
 #
@@ -82,7 +82,13 @@ if NAMES_FILE.exists():
              if l.strip() and not l.startswith('#')]
 
 STRUCT_RE = re.compile('|'.join(STRUCTURAL))
-NAME_RE = re.compile('|'.join(r'\b' + n + r'\b' for n in names), re.I) if names else None
+# re.escape, so the list is read as literal identifiers and cannot widen itself.
+# A name is data, not a pattern: an unescaped '.' matches any character and an
+# unescaped metacharacter at the edge defeats the \b anchors either side of it,
+# so a single stray punctuation mark in that file silently changes what every
+# repo's gate matches. Escaping makes the guarantee structural rather than a
+# property of whatever happens to be listed today.
+NAME_RE = re.compile('|'.join(r'\b' + re.escape(n) + r'\b' for n in names), re.I) if names else None
 ALLOWED_RE = re.compile('|'.join(ALLOWED), re.I) if ALLOWED else None
 
 # Comments that narrate a session or attribute a decision to a person, rather than
@@ -176,14 +182,24 @@ if '--stdin' in sys.argv:
             (_narr if FAIL_RE.search(_m.group(0)) else _soft).append(_line)
     if not NAMES_FILE.exists():
         print(f'DEGRADED: {NAMES_FILE} missing'); sys.exit(2)
-    for _line in _soft:
-        print(f'  -- narrates rather than states a constraint:\n  {_line}')
-    if _hits or _narr:
+    # THE REASON FOR THE FAILURE PRINTS FIRST; the advisory warnings follow it.
+    # This ordering is load-bearing rather than cosmetic, because every caller
+    # truncates this output — the nightly sweep files only the first lines — so
+    # whatever prints first is the only thing anyone reads. It used to be the other
+    # way round, and on 2026-08-05 that hid a REAL finding: the sweep correctly
+    # caught the owner's first name in the commit messages of three repos, two of
+    # them public, but every visible line was a soft narrative warning, so the alert
+    # read as noise and was recorded as a false positive. The names were only
+    # removed because someone went and looked past the truncation.
+    # A truncated alert must lose the noise, never the reason it fired.
+    _failed = bool(_hits or _narr)
+    if _failed:
         print(f'{len(_hits)} identifier hit(s), {len(_narr)} narrative hit(s) '
               'in the supplied text:')
         print('\n'.join(_hits + _narr))
-        sys.exit(1)
-    sys.exit(0)
+    for _line in _soft:
+        print(f'  -- narrates rather than states a constraint:\n  {_line}')
+    sys.exit(1 if _failed else 0)
 
 fails, warns = [], []
 repo = pathlib.Path(__file__).resolve().parent.parent
