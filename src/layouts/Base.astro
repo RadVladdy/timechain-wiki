@@ -10,6 +10,14 @@ const {
 const full = title === "TimechainWiki" ? title : `${title} — TimechainWiki`;
 const canonical = new URL(Astro.url.pathname, Astro.site);
 const ogImage = new URL("/brand/banner.png", Astro.site);
+
+// Crawlers fetch /favicon.ico by convention regardless of the icon tags in <head>,
+// so a real .ico lives there too — declared explicitly for browsers that prefer it.
+//
+// The Cloudflare Web Analytics beacon is hard-wired rather than relying on the zone's
+// auto-install: Cloudflare's HTML injection does not reach Pages-served responses, so
+// auto_install registers in the API but never actually lands the beacon. It is
+// cookieless and collects no personal data.
 ---
 <!doctype html>
 <html lang="en">
@@ -32,9 +40,6 @@ const ogImage = new URL("/brand/banner.png", Astro.site);
     <meta name="twitter:description" content={description} />
     <meta name="twitter:image" content={ogImage} />
     {jsonLd && <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />}
-    <!-- Crawlers fetch /favicon.ico by convention regardless of these tags, so
-         a real .ico lives there too — declared here for browsers that prefer an
-         explicit reference. -->
     <link rel="icon" href="/favicon.ico" sizes="any" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png?v=2" />
     <link rel="icon" type="image/png" sizes="512x512" href="/favicon-512.png?v=2" />
@@ -47,10 +52,6 @@ const ogImage = new URL("/brand/banner.png", Astro.site);
         } catch (e) {}
       })();
     </script>
-    <!-- Cloudflare Web Analytics — cookieless, no personal data collected.
-         Hard-wired rather than relying on the zone's auto-install: Cloudflare's
-         HTML injection does not reach Pages-served responses, so auto_install
-         registers in the API but never actually lands the beacon. -->
     <script
       is:inline
       defer
