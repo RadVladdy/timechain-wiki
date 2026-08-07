@@ -206,14 +206,29 @@ repo = pathlib.Path(__file__).resolve().parent.parent
 warn_only = '--warn-only' in sys.argv   # downgrade §4's hard fail while mid-cleanup
 
 # ── 1. the built output — what the public can actually read ─────────────────
+# Count what each root actually YIELDED. A configured root that is missing or
+# empty scans zero files and still falls through to the affirmative "clean"
+# sentence at the bottom — a clean exit from a check that read nothing, which is
+# indistinguishable from a clean exit from a check that read everything. `dist/`
+# is gitignored, so absent is its ordinary state on a fresh clone or after a
+# `git clean`, and that is precisely why it could not be left looking green.
+#
+# BUILT = [] is a DIFFERENT thing and is deliberately NOT degraded: a repo with
+# no public surface configures no roots on purpose. The failure being caught here
+# is a root that was configured and then read nothing.
+blind = []
 for d in BUILT:
+    found = 0
     for f in walk(repo / d, TEXT_EXT):
+        found += 1
         try:
             text = f.read_text(errors='replace')
         except Exception:
             continue
         for kind, s, e in scan(text):
             fails.append(f'{kind} IN BUILT OUTPUT  {f.relative_to(repo)}\n    …{ctx(text, s, e)}…')
+    if found == 0:
+        blind.append(d)
 
 # ── 2/3. the two mechanisms, so the next one is caught before it ships ──────
 for d in SOURCE:
@@ -249,6 +264,27 @@ for d in SOURCE:
         # ── 4. the root cause: comments that narrate instead of constrain ────
         # Markdown is prose, not code — `//` inside a URL is not a comment, and
         # this file's own docstring quotes the patterns it hunts for.
+        #
+        # WHAT THIS SKIP DOES AND DOES NOT COST, measured 2026-08-06 across all six
+        # repos, because it reads like a hole and is not one. The skip is §4 ONLY.
+        # A .md file is still read for identifiers a few lines above — a name or a
+        # home path in a card body FAILS the push, verified by planting one. What
+        # escapes is the narrow case of a §4 shape that names nobody.
+        #
+        # DO NOT "FIX" THIS BY DELETING THE SKIP. Removing it was tested against
+        # every .md file in all six repos: it catches nothing true and fires on nine
+        # pieces of correct published prose, because in these repos markdown is the
+        # PRODUCT, not commentary about it. §4 hunts session narrative in code
+        # comments; the same shapes in a published surface are the writing. A
+        # first-person essay legitimately says "I chose"; an encyclopedia entry
+        # legitimately says "what he said". The only hard hits anywhere were four
+        # possessives naming nobody, three of them a surface quoting an editorial
+        # decision and one a card's re-home rationale, where the convention already
+        # prescribes the impersonal form the text uses.
+        #
+        # A check that fires on the thing it is meant to protect is a check that
+        # gets commented out, which is the reasoning the softer §4 patterns are
+        # already warnings for.
         if f.suffix == '.md' or f.name == 'check-pseudonymity.py':
             continue
         cmts = (list(re.finditer(r'#.*', text)) if f.suffix == '.py'
@@ -275,6 +311,18 @@ if warns:
 if not NAMES_FILE.exists():
     print(f'!! DEGRADED: {NAMES_FILE} is missing, so only structural identifiers were')
     print('   checked. Recreate it (one name per line) before trusting a clean result.')
+    sys.exit(2)
+
+# Same shape, same exit code, for the other way this check can read nothing and
+# report clean. Kept beside its sibling so there is one place to look for "the
+# run was blind" rather than two.
+if blind:
+    _roots = ', '.join(blind)
+    print(f'!! DEGRADED: the built-output scan read ZERO files — {_roots} '
+          f'{"is" if len(blind) == 1 else "are"} missing or empty.')
+    print('   NOTHING here checked what the public can actually fetch, which is the')
+    print('   first thing this script exists to do. It exits non-zero rather than')
+    print('   print a pass it did not earn. Build first, then re-run.')
     sys.exit(2)
 
 if fails:
