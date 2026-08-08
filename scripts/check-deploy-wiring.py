@@ -85,12 +85,50 @@ else:
     if "CLOUDFLARE_API_TOKEN" not in body:
         fail("scripts/deploy.sh never references CLOUDFLARE_API_TOKEN")
 
-# 3. the gate itself is tracked, not a local-only hook
-tracked = subprocess.run(["git", "ls-files", ".githooks/pre-push"],
-                         capture_output=True, text=True).stdout.strip()
-if not tracked:
-    fail(".githooks/pre-push is not tracked — an untracked hook exists only on the "
+# 3. the gate itself: TRACKED, EXECUTABLE IN THE INDEX, and actually WIRED.
+#
+# Three assertions, because a hook stops gating in three unrelated ways and only
+# the first was checked. Section 2 above tests deploy.sh for executability, so
+# this check was blind in one of the two halves of its own pattern.
+#
+#   tracked    — an untracked hook exists only on the box that wrote it.
+#   index mode — git SILENTLY SKIPS a non-executable hook, printing a `hint:` on
+#                stderr nobody reads. Demonstrated in a scratch clone: an
+#                executable pre-commit exiting 1 refused the commit; `chmod -x`
+#                on the identical hook and the commit SUCCEEDED, no error.
+#   hooksPath  — `git config --unset core.hooksPath` turns off every hook in the
+#                repo while the file stays tracked and executable. That is also
+#                the state of every fresh clone until `npm install` runs
+#                `prepare`, so it is the ordinary case, not a hypothetical.
+#
+# THE MODE IS READ FROM THE INDEX, never with os.access(). os.access reads the
+# WORKING-TREE bit — whatever the checkout happens to have written — and under
+# core.fileMode=false git ignores that bit entirely, so os.access would false-fail
+# on a correctly committed hook. The index mode is what a fresh clone will get,
+# which is the thing worth asserting.
+HOOK = ".githooks/pre-push"
+staged = subprocess.run(["git", "ls-files", "-s", HOOK],
+                        capture_output=True, text=True).stdout.strip()
+if not staged:
+    fail(f"{HOOK} is not tracked — an untracked hook exists only on the "
          "box that wrote it, which is how a gate quietly stops existing")
+else:
+    mode = staged.split()[0]
+    if mode != "100755":
+        fail(f"{HOOK} is tracked with mode {mode}, not 100755. git skips a "
+             "non-executable hook with only a `hint:` on stderr, so every gate in "
+             "this repo would be off while the file still looks perfectly present. "
+             f"Fix: git update-index --chmod=+x {HOOK}")
+    else:
+        NOTES.append("pre-push tracked 100755")
+
+hooks_path = subprocess.run(["git", "config", "--get", "core.hooksPath"],
+                            capture_output=True, text=True).stdout.strip()
+if hooks_path != ".githooks":
+    fail(f"core.hooksPath is {hooks_path or 'unset'}, not .githooks — the tracked "
+         "hook is not wired to anything and NO gate runs on push. This is the "
+         "default state of a fresh clone until `npm install` runs `prepare`. "
+         "Fix: git config core.hooksPath .githooks")
 
 name = os.path.basename(ROOT)
 if FAILURES:
@@ -102,4 +140,5 @@ if FAILURES:
     sys.exit(1)
 
 print(f"clean — {name}: npm run deploy → scripts/deploy.sh, "
-      f"{'; '.join(NOTES) if NOTES else 'wiring intact'}, pre-push tracked")
+      f"{'; '.join(NOTES) if NOTES else 'wiring intact'}, "
+      f"core.hooksPath={hooks_path}")

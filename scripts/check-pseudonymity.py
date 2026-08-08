@@ -158,11 +158,25 @@ FAIL_RE = re.compile('|'.join(p for p, _ in NARRATIVE_FAIL), re.I)
 # of `.json`/`.jsonc` config was scanned by NOTHING until 2026-08-07 because
 # neither extension was listed. `''` means "no suffix" and is deliberate; the
 # is_text() sniff below is what keeps it from reading binaries.
+#
+# `.svg` IS TEXT, IS LIVE-SERVED, AND IS THE COMMONEST CARRIER OF A `/Users/<name>/`
+# PATH IN A DESIGN ASSET — every export tool writes the source document's path into
+# a comment or <metadata>. It was in NEITHER set, so it was read on NEITHER pass.
+# Proven with a paired control: the identical bytes planted in public/favicon.svg
+# and dist/favicon.svg exited 0, and the same bytes copied to dist/proof.txt exited
+# 1. `.evt` is the same shape — 16 plain-text, live-served anchor files on one site,
+# outside both sets, i.e. more than the .svg surface.
+#
+# ADDED COVERAGE, MEASURED BEFORE ADDING: 13 .svg and 16 .evt files across the six
+# repos produce ZERO hits today. This is not the §4 markdown case, which catches
+# nothing true and fires on correct published prose — this fires on nothing at all
+# and closes a surface that was simply unread.
 TEXT_EXT = {'.html', '.js', '.mjs', '.cjs', '.css', '.xml', '.txt', '.json',
-            '.jsonc', '.md', ''}
+            '.jsonc', '.md', '.svg', '.evt', ''}
 SRC_EXT = {'.astro', '.js', '.mjs', '.cjs', '.jsx', '.tsx', '.ts', '.mts', '.cts',
            '.svelte', '.vue', '.html', '.css', '.py', '.sh', '.md', '.json',
-           '.jsonc', '.yml', '.yaml', '.toml', '.txt', '.xml', '.sql', ''}
+           '.jsonc', '.yml', '.yaml', '.toml', '.txt', '.xml', '.sql',
+           '.svg', '.evt', ''}
 SKIP_DIRS = {'node_modules', '.git', '.wrangler', '.astro', '.cache', '__pycache__', 'venv'}
 
 # Directory names skipped by the SOURCE pass ONLY. They cannot go in SKIP_DIRS or
@@ -209,6 +223,27 @@ def scan(text):
 
 def ctx(text, s, e):
     return re.sub(r'\s+', ' ', text[max(0, s - 90):e + 70])
+
+
+def html_comments(text):
+    """Yield (carries_identifier, snippet) for every non-empty HTML comment.
+
+    Shared by BOTH passes on purpose. It used to exist only inside the source
+    loop, which made the rule source-only: a nameless comment in dist/index.html
+    passed while the IDENTICAL string in an .astro failed. That is backwards —
+    the built output is the thing the public actually fetches, and a comment
+    there has already shipped rather than merely being at risk of shipping.
+
+    The gap was not hypothetical. Comments can reach built HTML by routes no
+    source scan covers: markup assembled in a .ts template literal, a plain
+    served .html file, a generated page. Turning this on found 39 internal
+    comments live on a public site whose SOURCE had been cleaned 11 days
+    earlier — the source-side gate was green the whole time.
+    """
+    for m in re.finditer(r'<!--.*?-->', text, re.S):
+        if not m.group(0)[4:-3].strip():
+            continue          # <!-- --> spacers carry nothing
+        yield any(scan(m.group(0))), re.sub(chr(10), ' ', m.group(0))[:140]
 
 
 def walk(root, exts, skip_dirs=()):
@@ -308,6 +343,18 @@ for d in BUILT:
             continue
         for kind, s, e in scan(text):
             fails.append(f'{kind} IN BUILT OUTPUT  {f.relative_to(repo)}\n    …{ctx(text, s, e)}…')
+
+        # The same comment rule the source pass applies, on the surface where a
+        # comment is no longer a RISK of shipping but a fact of having shipped.
+        # Restricted to .html: an .svg carries a generator comment as ordinary
+        # export output, and failing on that would be a new editorial rule on
+        # design assets rather than the coverage gap this closes.
+        if f.suffix == '.html':
+            for named, snip in html_comments(text):
+                kind = ('IDENTIFIER IN AN HTML COMMENT'
+                        if named else 'HTML COMMENT IN THE BUILT OUTPUT')
+                fails.append(f'{kind} (the public fetches this)  '
+                             f'{f.relative_to(repo)}\n    {snip}')
     if found == 0:
         blind.append(('built output', d))
 
@@ -339,19 +386,24 @@ for d in SOURCE:
         #     <script>                   — but NOT `is:inline`, which is emitted verbatim
         if f.suffix in ('.astro', '.html', '.svelte', '.vue'):
             body = text.split('---', 2)[-1] if (f.suffix == '.astro' and text.startswith('---')) else text
-            for m in re.finditer(r'<!--.*?-->', body, re.S):
-                inner = m.group(0)[4:-3].strip()
-                if not inner:
-                    continue          # <!-- --> spacers carry nothing
-                kind = ('IDENTIFIER IN AN HTML COMMENT' if any(scan(m.group(0)))
-                        else 'HTML COMMENT IN TEMPLATE POSITION')
-                fails.append(f'{kind} (these SHIP to the reader)  {rel}'
-                             f'\n    {re.sub(chr(10), " ", m.group(0))[:140]}')
+            for named, snip in html_comments(body):
+                kind = ('IDENTIFIER IN AN HTML COMMENT'
+                        if named else 'HTML COMMENT IN TEMPLATE POSITION')
+                fails.append(f'{kind} (these SHIP to the reader)  {rel}\n    {snip}')
 
         # A {/* */} inside a template literal is not a comment — it renders as text.
         # Only meaningful where template literals build markup; in .jsx/.tsx a
         # {/* */} is an ordinary, correct JSX comment, so those are not scanned.
-        if f.suffix in ('.astro', '.js', '.mjs', '.cjs'):
+        #
+        # `.ts` BELONGS HERE AND WAS MISSING. Plain TypeScript is not JSX, so the
+        # .jsx/.tsx carve-out never applied to it — it was simply left out. It is
+        # also where this codebase actually assembles markup: src/lib/diagrams.ts
+        # builds inline SVG and HTML in template literals whose output lands in
+        # dist/*.html. That file sat outside this scan AND outside the HTML-comment
+        # scan, unread by two guards at once, which is how a diagram advertising a
+        # withdrawn route survived every content sweep. Measured: 76 .ts files
+        # across the six repos, zero hits — pure added coverage.
+        if f.suffix in ('.astro', '.js', '.mjs', '.cjs', '.ts', '.mts', '.cts'):
             for m in re.finditer(r'\{/\*.*?\*/\}', text, re.S):
                 if text[:m.start()].count('`') % 2 == 1:
                     fails.append(

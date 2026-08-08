@@ -31,10 +31,58 @@ while read -r _local_ref local_sha _remote_ref remote_sha; do
 done
 export BK_PUSH_COMMITS="$push_commits"
 
-fail=0
+# The gates every repo carrying this hook must run, NAMED rather than discovered.
+# The glob below finds the site's own checks; these two are portfolio-wide and are
+# asserted by name because a glob cannot tell "this repo runs no checks" from "the
+# checks are gone" — a discovery mechanism has nowhere to express deliberate
+# emptiness. Measured before this list existed, driving this hook on stdin exactly
+# as git does, with real findings planted:
+#   • no scripts/check-*.py at all  -> "all checks clean", exit 0, a home path
+#     sitting in the tree unread
+#   • check-commit-messages.py alone removed -> "all checks clean", exit 0, with a
+#     listed identifier in a commit message the push was about to publish. Nothing
+#     else reads history, so removing that one file removes the whole surface.
+#   • check-pseudonymity.py alone removed -> non-zero, but only by accident:
+#     check-commit-messages.py shells out to it and reports the failure as a
+#     missing identifier list. An accidental tripwire with a misleading message is
+#     not an assertion, and it disappears the moment either file moves.
+# Checker counts already differ across the repos carrying this hook (8/3/3/3/2/2),
+# so a count is not assertable here; a named floor is.
+REQUIRED_CHECKS=(
+  scripts/check-pseudonymity.py     # content + built output
+  scripts/check-commit-messages.py  # history — the surface nothing else reads
+)
+
 shopt -s nullglob
-for check in scripts/check-*.py; do
+checks=(scripts/check-*.py)
+
+missing=()
+for want in "${REQUIRED_CHECKS[@]}"; do
+  [ -f "$want" ] || missing+=("$want")
+done
+
+if [ ${#checks[@]} -eq 0 ]; then
+  echo "!! PUSH BLOCKED — scripts/check-*.py matched NOTHING, so this gate ran zero"
+  echo "   checks. It used to print 'all checks clean' here, which is a clean exit"
+  echo "   from a gate that inspected none of the public surface."
+  exit 1
+fi
+
+if [ ${#missing[@]} -ne 0 ]; then
+  echo "!! PUSH BLOCKED — a portfolio-wide gate is missing from this repo:"
+  for m in "${missing[@]}"; do echo "     ✗ $m"; done
+  echo "   Standard: vault 40-Projects/_Standards-Projects.md § 'How every site is"
+  echo "   managed' — every repo runs check-pseudonymity.py plus"
+  echo "   check-commit-messages.py plus its own set. Restore it from a sibling repo;"
+  echo "   the shared body is byte-identical and only the config block differs."
+  exit 1
+fi
+
+fail=0
+ran=0
+for check in "${checks[@]}"; do
   echo "── $check"
+  ran=$((ran + 1))
   if ! python3 "$check"; then fail=1; fi
 done
 
@@ -44,4 +92,6 @@ if [ "$fail" -ne 0 ]; then
   echo "   Override only with a reason you would write down: git push --no-verify"
   exit 1
 fi
-echo "── pre-push: all checks clean"
+# States what ran, not merely that nothing objected: a pass that names no number
+# reads identically whether it ran eight checks or none.
+echo "── pre-push: $ran check(s) clean"
