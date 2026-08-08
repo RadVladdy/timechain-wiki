@@ -2,3 +2,31 @@
 /.well-known/nostr.json
   Access-Control-Allow-Origin: *
   Content-Type: application/json
+
+# ⚠️ THE MACHINE ROUTES ARE noindex — AND THIS DOES NOT MAKE THEM LESS AVAILABLE
+# TO AGENTS, which is the whole point of this site's crawlability work.
+# `X-Robots-Tag: noindex` is a directive to SEARCH INDEXERS. It is NOT a crawl
+# block: these routes still serve 200 with their full body to anyone who asks,
+# robots.txt still welcomes every named AI crawler, /llms.txt still indexes all
+# 394 entries, and every article page still advertises its twin via rel=alternate.
+# The ONLY thing it removes is Google keeping a second copy of the encyclopedia.
+#
+# Why it was needed (measured 2026-08-07 against Search Console + the live site):
+# every article links `/wiki/<slug>.md`, so the site presents ~800 crawlable URLs
+# for 394 real articles, and nothing tells Google the two halves are the same
+# thing — a .md file cannot carry an HTML <link rel=canonical>, so an HTTP header
+# is the only place that signal can live. Search Console showed 399 of 400 URLs
+# sitting in "Discovered - currently not indexed": Google had found the site and
+# was rationing how much of it to fetch. Handing a 16-day-old domain a crawl
+# surface twice the size of its actual content spends that ration on duplicates.
+#
+# NOTE: `/*.md` matches NESTED paths, so this one rule covers every /wiki/*.md
+# twin. Verified on bitcoineconomy.ai, which documents the same behaviour in its
+# own _headers. Cloudflare applies EVERY matching rule cumulatively and CONCATENATES
+# values for repeated headers — so never add a second block for a path listed here.
+/*.md
+  X-Robots-Tag: noindex
+/llms.txt
+  X-Robots-Tag: noindex
+/llms-full.txt
+  X-Robots-Tag: noindex
