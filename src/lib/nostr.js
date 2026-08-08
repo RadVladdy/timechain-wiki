@@ -5,16 +5,12 @@
 // initial page bundle.
 import { SimplePool, nip19, generateSecretKey, getPublicKey } from "nostr-tools";
 
-// Read/write relays. Kept small and mainstream; a launch-time setting later.
-export const RELAYS = [
-  "wss://relay.damus.io",
-  "wss://nos.lol",
-  "wss://relay.primal.net",
-  "wss://relay.nostr.band",
-];
-// Profile (kind-0) lookups — include purplepag.es, the profile-metadata relay
-// that aggregates kind-0 across the network, so avatars resolve reliably.
-const PROFILE_RELAYS = ["wss://purplepag.es", "wss://relay.nostr.band", "wss://relay.damus.io", "wss://nos.lol", "wss://relay.primal.net"];
+// Read/write relays + profile-lookup set — GENERATED from the Nostr registry
+// (nostr-publisher), gated by scripts/check-nostr-registry.py. The old hand
+// list here still pinned degraded relay.nostr.band in the WRITE set; readers'
+// highlights now go to the free-to-write healthy set, degraded sorted last.
+import { RELAYS, PROFILE_RELAYS } from "./nostr-relays.generated.js";
+export { RELAYS };
 
 const toHex = (b) => Array.from(b).map((x) => x.toString(16).padStart(2, "0")).join("");
 const fromHex = (h) => new Uint8Array(h.match(/.{1,2}/g).map((x) => parseInt(x, 16)));
