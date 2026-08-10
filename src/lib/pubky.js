@@ -38,16 +38,30 @@ const file = (k, id, priv) => dir(k, priv) + id + ".json";
 
 export function hasSession() { return !!session; }
 
-// Whether THIS session may use the private namespace. Sessions created before
-// private storage existed were granted `/pub/` only, so they must not be offered
-// a private option that would fail on write — the reader re-approves in Pubky
-// Ring to upgrade, and until then private simply isn't available to them.
+// Whether THIS session may use the private namespace. Two independent gates,
+// both learned the hard way:
+//   • the SESSION — sign-ins from before private storage existed hold `/pub/`
+//     only, and the reader re-approves in Pubky Ring to upgrade;
+//   • the HOMESERVER — Pubky Ring can grant `/priv/` while the reader's
+//     homeserver still refuses it (Synonym's production homeserver 403s with
+//     "Writing to directories other than '/pub/' is forbidden" — the feature is
+//     ALPHA and they sensibly keep it off in production; verified on a real
+//     RadVladdy sign-in 2026-08-10). That refusal is remembered per identity so
+//     the UI stops promising a Private that can never succeed.
 export function canPrivate() {
   if (!session) return false;
+  if (privUnsupported()) return false;
   try {
     return (session.info.capabilities || []).some((c) => c.startsWith("/priv/") && c.includes("w"));
   } catch { return false; }
 }
+
+const privKey = () => "tw:pkpriv-unsup:" + (userId() || "");
+export function privUnsupported() {
+  try { return !!session && localStorage.getItem(privKey()) === "1"; } catch { return false; }
+}
+function markPrivUnsupported() { try { localStorage.setItem(privKey(), "1"); } catch {} }
+const isPrivRefusal = (e) => /other than '\/pub\/'/i.test(String(e?.message || e));
 
 // The in-flight flow's authorization URL is stashed here so a sign-in that
 // completes after an app-switch to Pubky Ring (which backgrounds or reloads this
@@ -130,7 +144,11 @@ export async function logout() {
 // even in storage only the owner can read.
 export async function publish(hl, key, link, priv) {
   if (!session) throw new Error("not-signed-in");
-  if (priv && !canPrivate()) throw new Error("this Pubky session predates private storage — sign in again to enable it");
+  if (priv && !canPrivate()) {
+    throw new Error(privUnsupported()
+      ? "your homeserver doesn't offer private storage yet"
+      : "this Pubky session predates private storage — sign in again to enable it");
+  }
   const rec = {
     id: hl.id,
     url: hl.url,
@@ -139,7 +157,15 @@ export async function publish(hl, key, link, priv) {
     createdAt: hl.createdAt || Date.now(),
     ...(!priv && link && link.nostrPubkey ? { nostrPubkey: link.nostrPubkey } : {}),
   };
-  await session.storage.putJson(file(key, hl.id, priv), rec);
+  try {
+    await session.storage.putJson(file(key, hl.id, priv), rec);
+  } catch (e) {
+    if (priv && isPrivRefusal(e)) {
+      markPrivUnsupported();
+      throw new Error("your homeserver doesn't offer private storage yet — the highlight stays on this device");
+    }
+    throw e;
+  }
   return hl.id;
 }
 

@@ -188,7 +188,11 @@ export async function privateHighlight(hl, path) {
     try {
       if (rail === "pubky") {
         const p = await plib();
-        if (!p.canPrivate()) throw new Error("this Pubky session predates private storage — sign in again to enable it");
+        if (!p.canPrivate()) {
+          throw new Error(p.privUnsupported()
+            ? "your homeserver doesn't offer private storage yet"
+            : "this Pubky session predates private storage — sign in again to enable it");
+        }
         await p.publish(hl, p.pageKey(path), null, true);
         rails.push("pubky");
       } else {

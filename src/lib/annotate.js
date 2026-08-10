@@ -136,9 +136,14 @@ const signedIn = () => acct.any();
 // promise them a Private option that would fail on write. Tracked as a flag
 // because renderAuth is synchronous and canPrivate() needs the SDK loaded.
 let pubkyPrivateReady = false;
+let pubkyPrivateServerNo = false;   // Ring granted /priv/ but the homeserver refuses it
 async function refreshPubkyCaps() {
-  if (!acct.hasPubky()) { pubkyPrivateReady = false; return; }
-  try { pubkyPrivateReady = (await plib()).canPrivate(); } catch { pubkyPrivateReady = false; }
+  if (!acct.hasPubky()) { pubkyPrivateReady = false; pubkyPrivateServerNo = false; return; }
+  try {
+    const p = await plib();
+    pubkyPrivateReady = p.canPrivate();
+    pubkyPrivateServerNo = p.privUnsupported();
+  } catch { pubkyPrivateReady = false; pubkyPrivateServerNo = false; }
 }
 // Shared-layer opt-in for the Pubky rail. The truth is the marker on the
 // reader's OWN homeserver (pubky.js setShared); localStorage only caches the
@@ -327,6 +332,11 @@ async function makePrivate(id) {
     toast(errors.length
       ? `Kept on this device — ${errors[0].message}.`
       : "Kept on this device — private storage isn't available on your account.", true);
+    // A refusal may have just taught us the homeserver doesn't do /priv/ at
+    // all — recompute the capability so the panel copy tells the truth now,
+    // not on the next sign-in.
+    await refreshPubkyCaps();
+    renderPanel();
     return false;
   }
   // Prefer the Nostr marker when both accepted: its blob is the cross-device
@@ -970,7 +980,9 @@ function renderAuth() {
     if (acct.hasPubky()) {
       box.appendChild(el("div", "tw-pk-note", pubkyPrivateReady
         ? "Pubky highlights live on your own homeserver — Public in its world-readable area, Private in its authenticated one (which your homeserver's operator can still read). Pubky ships private storage as experimental and may change it, so a copy always stays on this device. Suggestions travel over Nostr."
-        : "Your Pubky sign-in predates private storage, so Pubky highlights are public. Sign out and in again to enable Private. Suggestions travel over Nostr."));
+        : pubkyPrivateServerNo
+          ? "Your homeserver doesn't offer Pubky's private storage yet (it's an experimental feature many don't enable), so Pubky highlights are either Public or stay on this device. Private still works on Nostr if you connect one. Suggestions travel over Nostr."
+          : "Your Pubky sign-in predates private storage, so Pubky highlights are public. Sign out and in again to enable Private. Suggestions travel over Nostr."));
       box.appendChild(shareRow());
       box.appendChild(el("div", "tw-pk-note", "Shared layer: other readers can see public highlights on these pages. Your public Pubky highlights are included only while you're In — the site can't find them otherwise, and going Out drops them on the next nightly sweep. (Public Nostr highlights live on open relays, so those appear in the shared layer without an opt-in — that's what public means on Nostr.)"));
       refreshPkShare();
