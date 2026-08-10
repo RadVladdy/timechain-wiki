@@ -100,9 +100,20 @@ export async function logout() {
   try { localStorage.removeItem(AUTH_KEY); } catch {}
 }
 
-export async function publish(hl, key) {
+// `link` optionally carries the reader's Nostr key (see accounts.js § cross-rail
+// identity pointer), so the aggregator can tell that a highlight published to
+// both rails came from one person rather than two strangers. Only honoured when
+// the Nostr event names this Pubky id back — a one-sided claim proves nothing.
+export async function publish(hl, key, link) {
   if (!session) throw new Error("not-signed-in");
-  const rec = { id: hl.id, url: hl.url, anchor: hl.anchor, note: hl.note || "", createdAt: hl.createdAt || Date.now() };
+  const rec = {
+    id: hl.id,
+    url: hl.url,
+    anchor: hl.anchor,
+    note: hl.note || "",
+    createdAt: hl.createdAt || Date.now(),
+    ...(link && link.nostrPubkey ? { nostrPubkey: link.nostrPubkey } : {}),
+  };
   await session.storage.putJson(file(key, hl.id), rec);
   return hl.id;
 }
@@ -162,7 +173,7 @@ export async function fetchAll() {
     try {
       const rec = await session.storage.getJson(path);
       const id = path.split("/").pop().replace(/\.json$/, "");
-      out.push({ id, source: "pubky", url: rec.url || "/", anchor: rec.anchor, note: rec.note || "", createdAt: rec.createdAt || 0 });
+      out.push({ id, source: "pubky", url: rec.url || "/", anchor: rec.anchor, note: rec.note || "", createdAt: rec.createdAt || 0, nostrPubkey: rec.nostrPubkey || null });
     } catch {}
   }
   return out;
@@ -179,7 +190,7 @@ export async function fetch(key) {
     try {
       const rec = await session.storage.getJson(path);
       const id = path.split("/").pop().replace(/\.json$/, "");
-      out.push({ id, source: "pubky", anchor: rec.anchor, note: rec.note || "", createdAt: rec.createdAt || 0 });
+      out.push({ id, source: "pubky", anchor: rec.anchor, note: rec.note || "", createdAt: rec.createdAt || 0, nostrPubkey: rec.nostrPubkey || null });
     } catch {}
   }
   return out;

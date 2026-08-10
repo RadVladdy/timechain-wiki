@@ -5,14 +5,12 @@
 // with the CSS Custom Highlight API, so the article markup is never mutated.
 import { describe, resolve, hitTest } from "./anchor.js";
 import * as store from "./store.js";
+import * as acct from "./accounts.js";
 
 let root = null;
 let list = [];
 let ranges = new Map(); // id -> Range (for scroll + hit-test)
 const supportsHL = typeof globalThis.Highlight === "function" && !!(globalThis.CSS && CSS.highlights);
-let nostr = null; // lazy-loaded ./nostr.js
-let pubkyMod = null; // lazy-loaded ./pubky.js
-let user = null; // { method:'nip07'|'nip46'|'pubky', … }
 
 const $ = (sel, r = document) => r.querySelector(sel);
 
@@ -33,7 +31,7 @@ function syncMode() {
 function sugMode() { try { return localStorage.getItem(SUG_KEY) || "private"; } catch { return "private"; } }
 const setMode = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
 
-const TIP_TEXT = "Private sync stores highlights + notes as encrypted app data on Nostr relays (NIP-78, kind 30078) — synced across your devices, readable only by you, never shown in anyone's feed. Public uses Nostr's highlight format (NIP-84, kind 9802; your note travels inside the same event) — highlight-aware apps like Amethyst or Highlighter show these on your profile/feed. Off keeps everything on this device. Suggestions: Private sends an encrypted direct message to the wiki's editors (NIP-17 gift wrap — invisible to feeds, sender hidden from relays); Public sends a regular note (kind 1) that appears on your feed. Pubky highlights save to your own homeserver (public today — private storage is on Pubky's roadmap). Private modes need a signer that supports encryption (most modern extensions + Amber do).";
+const TIP_TEXT = "Private sync stores highlights + notes as encrypted app data on Nostr relays (NIP-78, kind 30078) — synced across your devices, readable only by you, never shown in anyone's feed. Public uses Nostr's highlight format (NIP-84, kind 9802; your note travels inside the same event) — highlight-aware apps like Amethyst or Highlighter show these on your profile/feed. Off keeps everything on this device. Pubky highlights save to your own homeserver, where they are publicly readable — so Private currently means Nostr, and a Pubky-only reader who picks Private keeps the highlight on this device rather than publishing it. You can connect both accounts at once; Publish to then chooses where new highlights go, and writing to both links the two records so other readers see one person, not two. Suggestions: Private sends an encrypted direct message to the wiki's editors (NIP-17 gift wrap — invisible to feeds, sender hidden from relays); Public sends a regular note (kind 1) that appears on your feed — either way they travel over Nostr, since Pubky has no way to receive a message. Private modes need a signer that supports encryption (most modern extensions + Amber do).";
 function infoTip() {
   const s = el("span", "tw-info");
   s.tabIndex = 0;
@@ -69,20 +67,28 @@ const MODE_TOASTS = {
   public: "New highlights publish publicly to your account as you make them.",
   off: "New highlights stay on this device until you act on them.",
 };
-function segRow(label, key, options, withTip) {
+const PUBLISH_TOASTS = {
+  nostr: "New highlights publish to your Nostr account.",
+  pubky: "New highlights save to your Pubky homeserver.",
+  both: "New highlights go to both — linked, so readers see one person, not two.",
+};
+// `read`/`write` are passed in because the three rows read from three different
+// places (two localStorage keys and the accounts module).
+function segRow(label, key, options, withTip, read, write) {
   const row = el("div", "tw-seg-row");
   row.dataset.key = key;
   row.appendChild(el("span", "tw-toggle-t", label));
   const seg = el("div", "tw-seg");
-  const cur = key === MODE_KEY ? syncMode() : sugMode();
+  const cur = read();
   for (const o of options) {
     const b = el("button", "tw-seg-b" + (o.v === cur ? " on" : ""), o.label);
     b.type = "button";
     b.dataset.v = o.v;
     b.addEventListener("click", () => {
-      setMode(key, o.v);
+      write(o.v);
       document.querySelectorAll(`.tw-seg-row[data-key="${key}"] .tw-seg-b`).forEach((x) => x.classList.toggle("on", x.dataset.v === o.v));
       if (key === MODE_KEY) toast(MODE_TOASTS[o.v]);
+      else if (key === PUB_KEY) toast(PUBLISH_TOASTS[o.v]);
       else toast(o.v === "private" ? "Suggestions send as encrypted DMs — nothing on your feed." : "Suggestions send as public notes on your feed.");
     });
     seg.appendChild(b);
@@ -91,37 +97,42 @@ function segRow(label, key, options, withTip) {
   if (withTip) row.appendChild(infoTip());
   return row;
 }
+const PUB_KEY = "tw:publishto";
 function settingsBlock(compact) {
   const box = el("div", "tw-settings");
   box.appendChild(segRow("Highlights", MODE_KEY, [
     { v: "private", label: "Private" }, { v: "public", label: "Public" }, { v: "off", label: "Off" },
-  ], true));
+  ], true, syncMode, (v) => setMode(MODE_KEY, v)));
+  // Only meaningful with two identities connected — with one there is nowhere else
+  // for a highlight to go, and the row would be a control that does nothing.
+  if (acct.hasBoth()) {
+    box.appendChild(segRow("Publish to", PUB_KEY, [
+      { v: "nostr", label: "Nostr" }, { v: "pubky", label: "Pubky" }, { v: "both", label: "Both" },
+    ], false, acct.publishTo, acct.setPublishTo));
+  }
   box.appendChild(segRow("Suggestions", SUG_KEY, [
     { v: "private", label: "Private" }, { v: "public", label: "Public" },
-  ], false));
+  ], false, sugMode, (v) => setMode(SUG_KEY, v)));
   return box;
 }
 const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
 const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
 
-async function nlib() { if (!nostr) nostr = await import("./nostr.js"); return nostr; }
-async function plib() { if (!pubkyMod) pubkyMod = await import("./pubky.js"); return pubkyMod; }
-const isPubky = () => user && user.method === "pubky";
-const userLabel = () => (user && user.name) || (isPubky() ? user.label : nshort(user.npub));
-
-// Read the stored session without pulling in the heavy sync bundles — keeps them
-// off the page for the common anonymous/logged-out reader. Either backend's key.
-function storedAuth() {
-  try { return JSON.parse(localStorage.getItem("tw:pubky") || localStorage.getItem("tw:auth") || "null"); }
-  catch { return null; }
+// Identity lives in accounts.js — a reader may hold a Nostr key, a Pubky
+// identity, or BOTH at once. Nothing here may assume a single "current user".
+const { nlib, plib } = acct;
+const signedIn = () => acct.any();
+// The label shown on the chip: the identity new highlights are actually going
+// to, so the face matches the destination.
+function userLabel() {
+  const p = acct.primary();
+  return p ? acct.label(p.rail) : "";
 }
-// Publish/fetch/ready routed to whichever backend the session uses.
-async function remotePublish(h) {
-  if (isPubky()) { const p = await plib(); return p.publish(h, p.pageKey(store.pageUrl())); }
-  return (await nlib()).publish(h, store.pageUrl());
-}
-async function remoteReady() {
-  return isPubky() ? (await plib()).hasSession() : (await nlib()).hasSigner();
+// Where a public highlight is about to go, in words — "Nostr", "Pubky", or
+// "Nostr + Pubky" when the reader has chosen to write to both.
+function destLabel() {
+  const t = acct.targets().map((r) => (r === "pubky" ? "Pubky" : "Nostr"));
+  return t.join(" + ") || "Nostr";
 }
 
 // ── painting ──────────────────────────────────────────────────────────────
@@ -215,19 +226,24 @@ async function makeHighlight(range) {
     setActive(hl.id);
     requestAnimationFrame(() => { const ta = $(`.tw-item[data-id="${hl.id}"] textarea`); ta && ta.focus(); });
   }
-  if (user && (await remoteReady())) {
-    if (isPubky()) { publishOne(hl.id); return; }
+  if (signedIn() && (await acct.ready())) {
     const m = syncMode();
-    if (m === "public") publishOne(hl.id);
-    else if (m === "private") {
-      const n = await nlib();
-      if (n.canEncrypt()) {
-        store.upsert({ id: hl.id, source: "nostrp", published: true, pubkey: user.pubkey });
-        list = store.all(); renderPanel(); paint();
-        queuePrivateSync();
-      } else {
-        toast("Your signer can't encrypt (NIP-44) — highlight kept on this device. Use Publish for public, or a signer like Alby/Amber for private sync.", true);
-      }
+    if (m === "public") { publishOne(hl.id); return; }
+    if (m !== "private") return;   // "off" — stays on this device
+    // Private currently means Nostr: it is the only rail with encryption today.
+    // A Pubky-only reader who asks for private gets told the truth rather than a
+    // highlight quietly published to a world-readable homeserver.
+    if (!acct.hasNostr()) {
+      toast("Pubky highlights are stored publicly on your homeserver, so Private isn't available there yet — this one stayed on your device. Connect Nostr for encrypted private sync.", true);
+      return;
+    }
+    const n = await nlib();
+    if (n.canEncrypt()) {
+      store.upsert({ id: hl.id, source: "nostrp", published: true, pubkey: acct.nostr().pubkey });
+      list = store.all(); renderPanel(); paint();
+      queuePrivateSync();
+    } else {
+      toast("Your signer can't encrypt (NIP-44) — highlight kept on this device. Use Publish for public, or a signer like Alby/Amber for private sync.", true);
     }
   }
 }
@@ -235,7 +251,7 @@ async function makeHighlight(range) {
 // Private sync: the page's private highlights live in ONE encrypted, replaceable
 // Nostr app-data event — any change re-writes the whole page blob (debounced).
 async function privateSyncNow() {
-  if (!user || isPubky()) return;
+  if (!acct.hasNostr()) return;   // encrypted app data is a Nostr capability
   const n = await nlib();
   if (!n.canEncrypt()) return;
   const items = store.all().filter((h) => h.source === "nostrp");
@@ -253,7 +269,7 @@ panel.innerHTML = `
   </div>
   <div class="tw-auth"></div>
   <div class="tw-list"></div>
-  <div class="tw-p-foot">Signed out, highlights and notes stay on this device — private. Signed in, they publish to your own Nostr or Pubky account as you make them — publicly, like posts. "Suggest" sends your note to the wiki's editors — privately (encrypted DM) or publicly, your choice. Signed in, the Highlights setting picks the default for new highlights: Private (encrypted sync), Public (feed-visible), or Off; every card can override it.</div>`;
+  <div class="tw-p-foot">Signed out, highlights and notes stay on this device — private. Signed in, they save to your own Nostr or Pubky account as you make them — you can connect both, and choose where new ones go. "Suggest" sends your note to the wiki's editors — privately (encrypted DM) or publicly, your choice. The Highlights setting picks the default for new highlights: Private (encrypted sync, Nostr), Public (visible to others), or Off; every card can override it.</div>`;
 document.body.appendChild(panel);
 
 const fab = el("button", "tw-fab");
@@ -292,8 +308,8 @@ const saveNote = debounce(async (id, val) => {
   // the same path — cheap and idempotent). Nostr events are immutable, so we don't
   // churn a new event per keystroke; the edit is re-published once, on blur.
   const hl = list.find((x) => x.id === id);
-  if (hl && hl.source === "pubky" && isPubky()) {
-    try { const p = await plib(); await p.publish(hl, p.pageKey(store.pageUrl())); }
+  if (hl && hl.source === "pubky" && acct.hasPubky()) {
+    try { const p = await plib(); await p.publish(hl, p.pageKey(store.pageUrl()), acct.crossLink()); }
     catch (e) { toast("Couldn't save the note to Pubky: " + (e.message || e), true); }
   }
   if (hl && hl.source === "nostrp") queuePrivateSync();
@@ -305,10 +321,10 @@ async function republishNostrIfDirty(id) {
   if (!dirtyNostr.has(id)) return;
   dirtyNostr.delete(id);
   const hl = list.find((x) => x.id === id);
-  if (!hl || hl.source !== "nostr" || !user || isPubky()) return;
+  if (!hl || hl.source !== "nostr" || !acct.hasNostr()) return;
   try {
     const n = await nlib();
-    const newId = await n.publish(hl, store.pageUrl());
+    const newId = await n.publish(hl, store.pageUrl(), acct.crossLink());
     n.deleteEvent(id).catch(() => {});
     store.remove(id);
     store.upsert({ ...hl, id: newId });
@@ -370,26 +386,26 @@ function renderPanel() {
     foot.appendChild(sug);
 
     // per-card visibility overrides
-    if (user && (h.source === "local" || h.source === "nostrp")) {
+    if (signedIn() && (h.source === "local" || h.source === "nostrp")) {
       const pub = el("button", "tw-mini", "Publish");
       pub.title = h.source === "nostrp"
         ? "Make THIS highlight public — publishes it to your account (visible in feeds)"
-        : `Publish publicly to your own ${isPubky() ? "Pubky" : "Nostr"} account`;
+        : `Publish publicly to your own ${destLabel()} account`;
       pub.addEventListener("click", () => publishOne(h.id, pub));
       foot.appendChild(pub);
     }
-    if (user && !isPubky() && h.source === "local") {
+    if (acct.hasNostr() && h.source === "local") {
       const pv = el("button", "tw-mini", "Private");
       pv.title = "Sync THIS highlight privately — encrypted, cross-device, never in feeds";
       pv.addEventListener("click", async () => {
         const n = await nlib();
         if (!n.canEncrypt()) { toast("Your signer can't encrypt (NIP-44) — private sync unavailable.", true); return; }
-        store.upsert({ id: h.id, source: "nostrp", published: true, pubkey: user.pubkey });
+        store.upsert({ id: h.id, source: "nostrp", published: true, pubkey: acct.nostr().pubkey });
         list = store.all(); renderPanel(); paint(); queuePrivateSync();
       });
       foot.appendChild(pv);
     }
-    if (user && !isPubky() && h.source === "nostr") {
+    if (acct.hasNostr() && h.source === "nostr") {
       const mp = el("button", "tw-mini", "Make private");
       mp.title = "Retract from public: asks relays to delete the public event and keeps the highlight in your encrypted private sync";
       mp.addEventListener("click", async () => {
@@ -486,10 +502,8 @@ accountModal.hidden = true;
 accountModal.innerHTML = `
   <div class="tw-dialog-bg" data-acclose></div>
   <div class="tw-dialog-panel" role="dialog" aria-modal="true">
-    <div class="tw-acc-head">
-      <div class="tw-acc-av"></div>
-      <div class="tw-acc-meta"><b class="tw-acc-name"></b><span class="tw-acc-id mono"></span></div>
-    </div>
+    <h3 class="tw-dialog-t tw-acc-title">Your account</h3>
+    <div class="tw-acc-list"></div>
     <p class="tw-dialog-d tw-acc-sub"></p>
     <a class="tw-acc-all" href="/highlights">My highlights — all pages →</a>
     <div class="tw-dialog-actions">
@@ -500,36 +514,48 @@ accountModal.innerHTML = `
 document.body.appendChild(accountModal);
 function closeAccount() { accountModal.hidden = true; }
 accountModal.querySelectorAll("[data-acclose]").forEach((e) => e.addEventListener("click", closeAccount));
-accountModal.querySelector(".tw-acc-out").addEventListener("click", () => { closeAccount(); doLogout(); });
+accountModal.querySelector(".tw-acc-out").addEventListener("click", () => { closeAccount(); doLogoutAll(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !accountModal.hidden) closeAccount(); });
 
+// Lists every connected identity, each with its own sign-out — a reader with
+// both rails needs to be able to drop one without losing the other.
 async function openAccount() {
-  const how = isPubky() ? "Pubky" : user.method === "nip46" ? "Nostr · remote signer" : "Nostr · browser extension";
-  accountModal.querySelector(".tw-acc-name").textContent = user.name || userLabel();
-  accountModal.querySelector(".tw-acc-id").textContent = isPubky() ? user.pubky : (user.npub || "");
-  accountModal.querySelector(".tw-acc-sub").textContent = `Signed in with ${how}. New highlights publish to your account as you make them — publicly. They also stay on this device.`;
-  const av = accountModal.querySelector(".tw-acc-av");
-  av.style.backgroundImage = user.avatar ? `url("${user.avatar}")` : "";
-  av.textContent = user.avatar ? "" : (user.name || userLabel() || "•").slice(0, 1).toUpperCase();
+  const connected = acct.rails();
+  accountModal.querySelector(".tw-acc-title").textContent = connected.length > 1 ? "Your accounts" : "Your account";
+  accountModal.querySelector(".tw-acc-out").textContent = connected.length > 1 ? "Sign out of all" : "Sign out";
+
+  const box = accountModal.querySelector(".tw-acc-list");
+  box.innerHTML = "";
+  for (const rail of connected) {
+    const u = acct.get(rail);
+    const row = el("div", "tw-acc-row");
+    const av = el("div", "tw-acc-av");
+    av.style.backgroundImage = u.avatar ? `url("${u.avatar}")` : "";
+    av.textContent = u.avatar ? "" : (acct.label(rail) || "•").slice(0, 1).toUpperCase();
+    row.appendChild(av);
+    const meta = el("div", "tw-acc-meta");
+    meta.appendChild(el("b", null, acct.label(rail)));
+    meta.appendChild(el("span", "tw-acc-id mono", rail === "pubky" ? String(u.pubky) : (u.npub || "")));
+    meta.appendChild(el("span", "tw-acc-how", howLabel(rail)));
+    row.appendChild(meta);
+    if (connected.length > 1) {
+      const out = el("button", "tw-mini", "Sign out");
+      out.addEventListener("click", async () => { await doLogout(rail); if (signedIn()) openAccount(); else closeAccount(); });
+      row.appendChild(out);
+    }
+    box.appendChild(row);
+  }
+
+  accountModal.querySelector(".tw-acc-sub").textContent = connected.length > 1
+    ? `New highlights go to ${destLabel()} as you make them, and stay on this device too. Change that in the highlights panel.`
+    : `New highlights publish to your account as you make them — publicly. They also stay on this device.`;
+
   accountModal.hidden = false;
-  if (user.name === undefined) loadProfile(); // fetch once, lazily
+  // Fetch names/avatars once, lazily — a rail whose profile we've never looked up.
+  if (connected.some((r) => acct.get(r).name === undefined)) acct.loadProfiles().then(afterProfile);
 }
 
-function openSignin() { if (user) { openAccount(); return; } signinModal.hidden = false; }
-
-// Pull the reader's profile (name + avatar) from whichever backend they used —
-// Pubky's pubky.app profile or a Nostr kind-0 — and refresh the chip + menu.
-async function loadProfile() {
-  try {
-    const prof = isPubky()
-      ? await (await plib()).getProfile()
-      : await (await nlib()).fetchProfile(user.pubkey);
-    user.name = prof?.name || null;
-    user.avatar = prof?.image || null;
-    renderChip();
-    if (!accountModal.hidden) openAccount();
-  } catch { user.name = null; }
-}
+function openSignin() { if (signedIn()) { openAccount(); return; } signinModal.hidden = false; }
 
 // A styled input dialog — replaces the browser's native prompt() so every popup
 // matches the site. askInput() resolves to the trimmed value or null (cancel).
@@ -636,13 +662,14 @@ async function suggestOne(id, btn) {
     ta && ta.focus();
     return;
   }
-  if (!user) {
-    toast("Suggestions are sent publicly, signed by you — sign in with Nostr first.");
-    openSignin();
-    return;
-  }
-  if (isPubky()) {
-    toast("Suggestions travel over Nostr, and Pubky can't receive messages yet — sign in with a Nostr method to send one.", true);
+  // Suggestions need a Nostr key: Pubky has no inbound-message primitive, so
+  // there is no way to deliver one to the editors over that rail. A reader with
+  // both connected can suggest even if their highlights publish to Pubky.
+  if (!acct.hasNostr()) {
+    toast(signedIn()
+      ? "Suggestions travel over Nostr, and Pubky can't receive messages yet — connect a Nostr signer to send one."
+      : "Suggestions are sent signed by you — sign in with Nostr first.", signedIn());
+    if (!signedIn()) openSignin();
     return;
   }
   const n = await nlib();
@@ -707,34 +734,53 @@ async function cancelPubky() { hidePubkyDialog(); try { (await plib()).cancelPen
 
 // Single completion path for a Pubky sign-in — whichever finishes first (the
 // in-page flow, a resume on return, or a resume on load). Guarded to run once.
+// Completion path for a Pubky sign-in — whichever finishes first (the in-page
+// flow, a resume on return, or a resume on load). Guarded on the PUBKY rail
+// only: a reader who already has Nostr connected is adding a second identity,
+// not replacing one.
 async function onSignedIn(u) {
-  if (!u || user) return;
-  user = u;
+  if (!u || acct.hasPubky()) return;
+  acct.set("pubky", u);
   hidePubkyDialog();
   renderChip();
   renderAuth();
-  toast("Signed in with Pubky — your highlights will sync.");
-  loadProfile();      // name + avatar, async; refreshes the chip when it arrives
+  toast(acct.hasBoth()
+    ? "Pubky connected — you now have both. Choose where new highlights go in the panel."
+    : "Signed in with Pubky — your highlights will sync.");
+  acct.loadProfile("pubky").then(afterProfile);
   await syncRemote();
 }
 
+// Chip shows the identity new highlights are going to; a "+1" marks the second
+// connected account so having both is visible at a glance rather than hidden.
 function renderChip() {
   if (!chip) return;
-  chip.classList.toggle("tw-in", !!user); // lets CSS show the label on mobile when signed in
-  if (user) {
+  chip.classList.toggle("tw-in", signedIn());
+  chip.classList.toggle("tw-both", acct.hasBoth());
+  if (signedIn()) {
+    const p = acct.primary();
+    const av = p && p.user ? p.user.avatar : null;
     const initial = (userLabel() || "•").trim().slice(0, 1).toUpperCase();
-    const badge = user.avatar
-      ? `<span class="tw-chip-av" style="background-image:url('${user.avatar}')"></span>`
+    const badge = av
+      ? `<span class="tw-chip-av" style="background-image:url('${av}')"></span>`
       : `<span class="tw-chip-av tw-chip-av--i">${initial}</span>`;
-    chip.innerHTML = badge + `<span class="tw-chip-label">${userLabel() || "Signed in"}</span>`;
-    const how = isPubky() ? "Pubky" : user.method === "nip46" ? "remote signer" : "extension";
-    chip.title = "Signed in with " + how + " — click to sign out";
+    const extra = acct.hasBoth() ? `<span class="tw-chip-plus">+1</span>` : "";
+    chip.innerHTML = badge + `<span class="tw-chip-label">${userLabel() || "Signed in"}</span>` + extra;
+    chip.title = acct.hasBoth()
+      ? `Nostr + Pubky connected — new highlights go to ${destLabel()}. Click to manage.`
+      : `Signed in with ${howLabel(acct.rails()[0])} — click to manage`;
   } else {
     chip.innerHTML = `<span class="dot"></span>Sign in · Nostr / Pubky`;
     chip.title = "Sign in to sync highlights";
   }
 }
-function nshort(npub) { return npub.slice(0, 10) + "…" + npub.slice(-4); }
+function howLabel(rail) {
+  if (rail === "pubky") return "Pubky";
+  const u = acct.nostr();
+  return u && u.method === "nip46" ? "Nostr · remote signer" : "Nostr · browser extension";
+}
+function afterProfile() { renderChip(); if (!accountModal.hidden) openAccount(); }
+function nshort(npub) { return npub ? npub.slice(0, 10) + "…" + npub.slice(-4) : ""; }
 
 async function doLogin(method) {
   closeSignin();
@@ -750,7 +796,7 @@ async function doLogin(method) {
       return;
     } else {
       const lib = await nlib();
-      if (method === "nip07") user = await lib.loginNip07();
+      if (method === "nip07") acct.set("nostr", await lib.loginNip07());
       else if (method === "bunker") {
         const s = await askInput({
           title: "Connect a remote signer",
@@ -759,23 +805,33 @@ async function doLogin(method) {
           confirmText: "Connect",
         });
         if (!s) return;
-        user = await lib.loginBunker(s);
+        acct.set("nostr", await lib.loginBunker(s));
       } else return;
     }
     renderChip();
     renderAuth();
-    loadProfile();      // Nostr kind-0 name + picture, async
+    acct.loadProfile("nostr").then(afterProfile);   // kind-0 name + picture, async
     await syncRemote();
-    toast(`Signed in with ${isPubky() ? "Pubky" : "Nostr"} — your highlights will sync.`);
+    toast(acct.hasBoth()
+      ? "Nostr connected — you now have both. Choose where new highlights go in the panel."
+      : "Signed in with Nostr — your highlights will sync.");
   } catch (e) {
     if (e.code === "no-extension" || e.message === "no-extension")
       toast("No Nostr extension found. Install Alby or nos2x, or use Amber on mobile.", true);
     else toast("Sign-in failed: " + (e.message || e), true);
   }
 }
-async function doLogout() {
-  try { if (isPubky()) await (await plib()).logout(); else (await nlib()).logout(); } catch {}
-  user = null;
+
+// Sign out of ONE rail, leaving the other connected.
+async function doLogout(rail) {
+  await acct.logout(rail);
+  renderChip(); renderAuth();
+  toast(signedIn()
+    ? `Signed out of ${rail === "pubky" ? "Pubky" : "Nostr"}. Your ${destLabel()} account is still connected.`
+    : "Signed out. Highlights stay saved on this device.");
+}
+async function doLogoutAll() {
+  await acct.logoutAll();
   renderChip(); renderAuth();
   toast("Signed out. Highlights stay saved on this device.");
 }
@@ -783,13 +839,29 @@ async function doLogout() {
 function renderAuth() {
   const box = panel.querySelector(".tw-auth");
   if (!box) return;
-  if (user) {
+  if (signedIn()) {
     const unpublished = list.filter((h) => h.source === "local").length;
-    box.innerHTML = `<div class="tw-signed"><span class="dot on"></span>Signed in · <b>${userLabel()}</b></div>`;
-    if (isPubky()) box.appendChild(el("div", "tw-pk-note", "Highlights save to your Pubky homeserver. Suggestions travel over Nostr."));
-    else box.appendChild(settingsBlock(false));
+    const who = acct.hasBoth()
+      ? `<b>${userLabel()}</b> · Nostr + Pubky`
+      : `<b>${userLabel()}</b>`;
+    box.innerHTML = `<div class="tw-signed"><span class="dot on"></span>Signed in · ${who}</div>`;
+    // The settings block now carries the Publish-to row when both rails are
+    // connected, so it is shown for every signed-in reader rather than being
+    // hidden from Pubky users as it used to be.
+    box.appendChild(settingsBlock(false));
+    if (acct.hasPubky()) {
+      box.appendChild(el("div", "tw-pk-note",
+        "Pubky highlights are stored on your own homeserver, where they are publicly readable. Suggestions travel over Nostr."));
+    }
+    // Offer to connect the rail they don't have yet — this is the only place the
+    // second identity is discoverable once you're already signed in.
+    if (!acct.hasBoth()) {
+      const add = el("button", "tw-syncbtn ghost", acct.hasPubky() ? "Also connect Nostr" : "Also connect Pubky");
+      add.addEventListener("click", () => { signinModal.hidden = false; });
+      box.appendChild(add);
+    }
     if (unpublished > 0) {
-      const b = el("button", "tw-syncbtn", `Publish ${unpublished} to ${isPubky() ? "Pubky" : "Nostr"} (public)`);
+      const b = el("button", "tw-syncbtn", `Publish ${unpublished} to ${destLabel()} (public)`);
       b.addEventListener("click", () => publishAll(b));
       box.appendChild(b);
     }
@@ -804,18 +876,33 @@ async function publishOne(id, btn) {
   if (!h) return;
   if (btn) { btn.disabled = true; btn.textContent = "Publishing…"; }
   try {
-    const newId = await remotePublish(h);           // Pubky keeps the id; Nostr returns an event id
-    const src = isPubky() ? "pubky" : "nostr";
+    // Fans out to every target rail. Nostr returns a new event id, Pubky keeps
+    // the id it was given — so when both are written the record is keyed by the
+    // Nostr id and carries the Pubky one alongside.
+    const { ids, errors } = await acct.publishHighlight(h, store.pageUrl());
+    if (!ids.nostr && !ids.pubky) throw new Error(errors.map((e) => `${e.rail}: ${e.message}`).join(" · ") || "nothing published");
+
+    const src = ids.nostr ? "nostr" : "pubky";
+    const newId = ids.nostr || ids.pubky;
+    const rec = {
+      source: src,
+      published: true,
+      pubkey: src === "nostr" ? acct.nostr().pubkey : acct.pubky().pubky,
+      ...(ids.nostr && ids.pubky ? { altRail: "pubky", altId: ids.pubky } : {}),
+    };
     if (newId && newId !== id) {
       store.remove(id);
-      store.upsert({ ...h, id: newId, source: src, published: true, pubkey: user.pubky || user.pubkey });
+      store.upsert({ ...h, ...rec, id: newId });
       if (activeId === id) activeId = newId;
     } else {
-      store.upsert({ id, source: src, published: true, pubkey: user.pubky || user.pubkey });
+      store.upsert({ id, ...rec });
     }
     list = store.all();
     renderPanel(); paint();
     queuePrivateSync(); // if it was in the private blob, drop it there
+    // One rail succeeding while the other failed is a real outcome, not a
+    // success — say which one didn't land rather than showing a silent tick.
+    if (errors.length) toast(`Published to ${src === "nostr" ? "Nostr" : "Pubky"}, but ${errors.map((e) => e.rail).join(" + ")} failed: ${errors[0].message}`, true);
   } catch (e) {
     toast("Publish failed: " + (e.message || e), true);
     if (btn) { btn.disabled = false; btn.textContent = "Publish"; }
@@ -828,28 +915,19 @@ async function publishAll(btn) {
 }
 
 async function syncRemote() {
-  if (!user) return;
+  if (!signedIn()) return;
   try {
-    let incoming;
-    if (isPubky()) { const p = await plib(); incoming = await p.fetch(p.pageKey(store.pageUrl())); }
-    else {
-      const n = await nlib();
-      const pub = await n.fetch(user.pubkey, store.pageUrl());
-      const priv = n.canEncrypt() ? await n.privateFetch(store.pageUrl()) : null;
-      incoming = [...(pub || []), ...(priv || [])];
-      // Self-clean ghosts: a local copy of a synced highlight that the relays no
-      // longer return was deleted elsewhere — prune it. Only when the fetch
-      // actually answered (null = unknown → never prune on a flaky connection).
-      const prune = (source, fetched) => {
-        if (fetched === null) return;
-        const ids = new Set(fetched.map((h) => h.id));
-        for (const h of store.all().filter((x) => x.source === source && !ids.has(x.id))) store.remove(h.id);
-      };
-      prune("nostr", pub);
-      prune("nostrp", priv);
-      list = store.all();
+    // Pulls from every connected rail at once — a reader with both gets their
+    // Nostr and Pubky highlights merged into one list.
+    const { incoming, prune } = await acct.fetchPage(store.pageUrl());
+    // Self-clean ghosts: a local copy of a synced highlight the source no longer
+    // returns was deleted elsewhere. Only for rails that actually ANSWERED —
+    // accounts.js omits a rail that failed, so a flaky connection never deletes.
+    for (const p of prune) {
+      for (const h of store.all().filter((x) => x.source === p.source && !p.ids.has(x.id))) store.remove(h.id);
     }
-    if (incoming && incoming.length) list = store.merge(incoming);
+    list = store.all();
+    if (incoming.length) list = store.merge(incoming);
     paint(); renderPanel();
     tryDeepLink();
   } catch {}
@@ -871,14 +949,13 @@ export async function init() {
   if (chip) chip.addEventListener("click", openSignin);
   // Only pull in a sync bundle if there's a session to restore; anonymous readers
   // get the highlighter with no heavy download.
-  const saved = storedAuth();
-  if (saved) {
-    user = saved;
-    try {
-      if (saved.method === "pubky") await (await plib()).restore();
-      else (await nlib()).restore();
-    } catch {}
-    loadProfile();
+  // Restores BOTH rails if both are stored. The old code read
+  // `tw:pubky || tw:auth`, so a reader with both silently lost their Nostr
+  // session on every page load.
+  const saved = acct.stored();
+  if (saved.nostr || saved.pubky) {
+    await acct.restoreAll();
+    acct.loadProfiles().then(afterProfile);
   }
   renderChip();
 
@@ -886,7 +963,7 @@ export async function init() {
   // backgrounded or reloaded) is picked up here on return: resume on load, and
   // again whenever the tab becomes visible, until we're signed in.
   const pubkyPending = () => { try { return !!sessionStorage.getItem("tw:pubky-pending"); } catch { return false; } };
-  const tryResume = () => { if (!user && pubkyPending()) plib().then((p) => p.resume()).then(onSignedIn).catch(() => {}); };
+  const tryResume = () => { if (!acct.hasPubky() && pubkyPending()) plib().then((p) => p.resume()).then(onSignedIn).catch(() => {}); };
   if (pubkyPending()) tryResume();
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") tryResume(); });
   window.addEventListener("focus", tryResume);
@@ -955,6 +1032,6 @@ export async function init() {
     }, 500);
   }
 
-  // If a session restored, pull this page's highlights from the sync backend.
-  if (user) syncRemote();
+  // If any session restored, pull this page's highlights from every rail.
+  if (signedIn()) syncRemote();
 }

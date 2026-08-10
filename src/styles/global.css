@@ -144,7 +144,12 @@ a{color:inherit}
   #signin.tw-in .tw-chip-label{display:none}
   #signin.tw-in .tw-chip-av{width:100%;height:100%;border:0;border-radius:50%}
   #signin.tw-in .tw-chip-av--i{font-size:15px}
+  /* the "+1" can't fit in a 38px circle — the ring below carries it instead */
+  #signin.tw-in .tw-chip-plus{display:none}
 }
+/* both identities connected: a brass ring, so the dual state reads on mobile
+   where the "+1" label has no room */
+#signin.tw-both{box-shadow:0 0 0 1.5px var(--brass)}
 
 /* ── ⌘K search modal ── */
 .modal{position:fixed;inset:0;z-index:80;display:flex;align-items:flex-start;justify-content:center;padding:12vh 18px 18px}
@@ -408,8 +413,17 @@ body.tw-selecting .tw-fab{visibility:hidden}
 .tw-acc-name{font-family:var(--serif);font-size:18px;font-weight:600}
 .tw-acc-id{font-size:11px;color:var(--ink-faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:230px}
 .tw-acc-sub{margin-top:4px}
+/* one row per connected identity — a reader may hold both Nostr and Pubky */
+.tw-acc-list{display:flex;flex-direction:column;gap:10px;margin-bottom:6px}
+.tw-acc-row{display:flex;align-items:center;gap:13px}
+.tw-acc-row .tw-acc-meta{flex:1 1 auto}
+.tw-acc-row .tw-acc-meta b{font-family:var(--serif);font-size:17px;font-weight:600}
+.tw-acc-how{font-size:11px;color:var(--ink-faint)}
+.tw-acc-row .tw-mini{flex:none}
 .tw-chip-av{width:18px;height:18px;border-radius:50%;background:var(--surface) center/cover no-repeat;border:1px solid var(--line);flex:none}
 .tw-chip-av--i{display:grid;place-items:center;font-family:var(--serif);font-weight:600;color:var(--brass);font-size:9px}
+/* marks a second connected account on the chip, so holding both is visible */
+.tw-chip-plus{font-size:10px;font-weight:600;color:var(--brass);margin-left:1px}
 
 /* Pubky sign-in dialog */
 .tw-pkdlg .tw-dialog-panel{text-align:center;max-width:360px}

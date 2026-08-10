@@ -127,7 +127,13 @@ export function logout() {
 export function hasSigner() { return !!signer; }
 
 // Build + sign + publish a kind-9802 highlight. Returns the event id.
-export async function publish(hl, path) {
+//
+// `link` optionally carries the reader's OTHER identity (see accounts.js
+// § cross-rail identity pointer). A reader signed into both rails who publishes
+// to both would otherwise appear to strangers as two unrelated people; the
+// `tw-pubky` tag lets the aggregator recognise one person — but only when the
+// Pubky side names this key back, since a one-sided claim proves nothing.
+export async function publish(hl, path, link) {
   if (!signer) {
     const u = storedUser();
     if (u?.method === "nip46") await reconnectBunker(u);
@@ -146,6 +152,7 @@ export async function publish(hl, path) {
       ["tw-suffix", a.suffix || ""],
       ["tw-pos", String(a.pos ?? 0)],
       ...(hl.note ? [["comment", hl.note]] : []),
+      ...(link && link.pubkyId ? [["tw-pubky", link.pubkyId]] : []),
       ["alt", "Highlight on Timechain Wiki"],
     ],
     pubkey: signer.pubkey,

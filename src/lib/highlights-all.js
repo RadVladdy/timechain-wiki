@@ -2,6 +2,8 @@
 // all storage modes — local (this browser), private sync (encrypted Nostr app
 // data), public (NIP-84), and Pubky homeserver. Grouped by entry, deep-linked
 // (#twhl=<id> scrolls to and activates the highlight on the article page).
+import * as acct from "./accounts.js";
+
 const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
 
 const SRC_LABEL = { local: "On this device", nostrp: "Private · synced", nostr: "Public on Nostr", pubky: "Public on Pubky" };
@@ -35,40 +37,42 @@ export async function renderAllHighlights() {
     const slug = (url.match(/\/wiki\/([a-z0-9-]+)/) || [])[1];
     return slug ? (titles[slug] || slug) : url === "/" ? "Home" : url;
   };
-  let backend = null; // "nostr" | "pubky" — which session (if any) restored
-
-  // gather: local always; remote per stored session (lazy imports keep the
-  // anonymous path light — this page is only reached from signed-in UI anyway)
+  // gather: local always; then EVERY connected rail. The old code read
+  // `tw:pubky || tw:auth` and kept a single `backend`, so a reader signed into
+  // both saw only their Pubky highlights and couldn't delete their Nostr ones.
   const byId = new Map();
   for (const h of localAll()) byId.set(h.id, h);
   let sessionNote = "";
-  try {
-    const stored = JSON.parse(localStorage.getItem("tw:pubky") || localStorage.getItem("tw:auth") || "null");
-    if (stored?.method === "pubky") {
-      backend = "pubky";
-      const p = await import("./pubky.js");
-      await p.restore();
-      for (const h of await p.fetchAll()) if (!byId.has(h.id)) byId.set(h.id, h);
-    } else if (stored) {
-      backend = "nostr";
-      const n = await import("./nostr.js");
-      await n.restore();
-      const { pub, priv, ok } = await n.fetchAllMine();
-      if (ok) {
-        // prune ghosts: local copies of synced highlights the relays no longer have
-        const live = new Set([...pub, ...priv].map((h) => h.id));
-        for (const [id, h] of [...byId]) {
-          if ((h.source === "nostr" || h.source === "nostrp") && !live.has(id)) {
-            byId.delete(id);
-            localRemove(h.url, id);
+  await acct.restoreAll();
+  if (!acct.any()) {
+    sessionNote = "Showing this device only — sign in on any article to include your synced highlights.";
+  } else {
+    const failed = [];
+    if (acct.hasPubky()) {
+      try {
+        const p = await acct.plib();
+        for (const h of await p.fetchAll()) if (!byId.has(h.id)) byId.set(h.id, h);
+      } catch { failed.push("Pubky"); }
+    }
+    if (acct.hasNostr()) {
+      try {
+        const n = await acct.nlib();
+        const { pub, priv, ok } = await n.fetchAllMine();
+        if (ok) {
+          // prune ghosts: local copies of synced highlights the relays no longer have
+          const live = new Set([...pub, ...priv].map((h) => h.id));
+          for (const [id, h] of [...byId]) {
+            if ((h.source === "nostr" || h.source === "nostrp") && !live.has(id)) {
+              byId.delete(id);
+              localRemove(h.url, id);
+            }
           }
         }
-      }
-      for (const h of [...pub, ...priv]) if (!byId.has(h.id)) byId.set(h.id, h);
-    } else {
-      sessionNote = "Showing this device only — sign in on any article to include your synced highlights.";
+        for (const h of [...pub, ...priv]) if (!byId.has(h.id)) byId.set(h.id, h);
+      } catch { failed.push("Nostr"); }
     }
-  } catch { sessionNote = "Couldn't reach your synced highlights just now — showing this device."; }
+    if (failed.length) sessionNote = `Couldn't reach your ${failed.join(" or ")} highlights just now — showing what loaded.`;
+  }
 
   const all = [...byId.values()].filter((h) => h.anchor && h.anchor.exact);
   box.innerHTML = "";
@@ -127,15 +131,16 @@ export async function renderAllHighlights() {
         const gi = items.indexOf(h); if (gi > -1) items.splice(gi, 1);
         card.remove();
         if (!sec.querySelector(".hl-card")) sec.remove();
+        // Gate on whether the highlight's OWN rail is connected — not on a single
+        // "current backend", which used to leave one rail's highlights
+        // undeletable for anyone signed into both.
         const bg = (async () => {
-          if (h.source === "nostr" && backend === "nostr") {
-            const n = await import("./nostr.js");
-            await n.deleteEvent(h.id);
-          } else if (h.source === "nostrp" && backend === "nostr") {
-            const n = await import("./nostr.js");
-            await n.privateSave(url, items.filter((x) => x.source === "nostrp"));
-          } else if (h.source === "pubky" && backend === "pubky") {
-            const p = await import("./pubky.js");
+          if (h.source === "nostr" && acct.hasNostr()) {
+            await (await acct.nlib()).deleteEvent(h.id);
+          } else if (h.source === "nostrp" && acct.hasNostr()) {
+            await (await acct.nlib()).privateSave(url, items.filter((x) => x.source === "nostrp"));
+          } else if (h.source === "pubky" && acct.hasPubky()) {
+            const p = await acct.plib();
             await p.remove(h.id, p.pageKey(url));
           }
         })();
