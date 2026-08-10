@@ -56,11 +56,14 @@ export function canPrivate() {
   } catch { return false; }
 }
 
-const privKey = () => "tw:pkpriv-unsup:" + (userId() || "");
+// Keyed off the stored identity, not the live session — the "your homeserver
+// doesn't do this" fact stays true across a lapsed cookie, and the panel must
+// not fall back to blaming the sign-in when the session merely needs restoring.
+const privId = () => userId() || String((storedUser() || {}).pubky || "").replace(/^pubky:?/, "");
 export function privUnsupported() {
-  try { return !!session && localStorage.getItem(privKey()) === "1"; } catch { return false; }
+  try { const id = privId(); return !!id && localStorage.getItem("tw:pkpriv-unsup:" + id) === "1"; } catch { return false; }
 }
-function markPrivUnsupported() { try { localStorage.setItem(privKey(), "1"); } catch {} }
+function markPrivUnsupported() { try { const id = privId(); if (id) localStorage.setItem("tw:pkpriv-unsup:" + id, "1"); } catch {} }
 const isPrivRefusal = (e) => /other than '\/pub\/'/i.test(String(e?.message || e));
 
 // The in-flight flow's authorization URL is stashed here so a sign-in that

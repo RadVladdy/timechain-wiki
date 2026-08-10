@@ -32,14 +32,16 @@ function syncMode() {
 function sugMode() { try { return localStorage.getItem(SUG_KEY) || "private"; } catch { return "private"; } }
 const setMode = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
 
-const TIP_TEXT = "Private on Nostr stores highlights + notes as encrypted app data on relays (NIP-78, kind 30078) — synced across your devices, readable only by you, never shown in anyone's feed; it needs a signer that supports encryption (most modern extensions + Amber do). Private on Pubky writes to the authenticated area of your homeserver: no other user can read it and it is never public, but whoever operates your homeserver can — unlike Nostr's private mode, it is access-controlled rather than encrypted. Pubky ships this as experimental and warns the API may change, so a copy of every highlight always stays on this device. Public on Nostr uses the highlight format (NIP-84, kind 9802; your note travels inside the same event), so apps like Amethyst or Highlighter show these on your profile; Public on Pubky writes to the world-readable area of your homeserver. Public highlights can also appear in this site's shared layer for other readers — Nostr ones arrive there automatically (public relays are public), Pubky ones only if you turn Shared layer on. Off keeps everything on this device. You can connect both accounts at once — Publish to then chooses where new highlights go, and writing to both links the two records so other readers see one person, not two. Suggestions always travel over Nostr, since Pubky has no way to receive a message: Private sends an encrypted direct message to the editors (NIP-17 gift wrap), Public sends a regular note that appears on your feed.";
-function infoTip() {
+const TIP_TEXT = "One setting for every connected account. Private on Nostr stores highlights + notes as encrypted app data on relays (NIP-78, kind 30078) — synced across your devices, readable only by you, never shown in anyone's feed; it needs a signer that supports encryption (most modern extensions + Amber do). Private on Pubky writes to the authenticated area of your homeserver: no other user can read it, but whoever operates your homeserver can — access-controlled rather than encrypted, and experimental, so a copy always stays on this device. Some homeservers don't enable it yet; if yours refuses, Private highlights simply stay on this device. Public on Nostr uses the highlight format (NIP-84, kind 9802), so apps like Amethyst or Highlighter show these on your profile; Public on Pubky writes to the world-readable area of your homeserver. Off keeps everything on this device. You can connect both accounts at once — Publish to then chooses where new highlights go, and writing to both links the two records so other readers see one person, not two. Suggestions always travel over Nostr, since Pubky has no way to receive a message.";
+const SHARED_VIEW_TIP = "Shows public highlights other readers left on these pages — marked in a different color, with any notes in a side panel. Refreshed nightly. Off hides them and shows only your own.";
+const SHARE_MINE_TIP = "Includes your public Pubky highlights in the shared layer other readers see. In writes a small marker to your own homeserver — only you can write there, so nobody can opt you in but you. Out removes yours on the next nightly sweep. Public Nostr highlights live on open relays, so those are already visible to everyone without any opt-in.";
+function infoTip(text) {
   const s = el("span", "tw-info");
   s.tabIndex = 0;
   s.setAttribute("role", "note");
   s.setAttribute("aria-label", "About publishing");
   s.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><path d="M12 11v6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="7.6" r="1.3" fill="currentColor"/></svg>`;
-  const tip = el("span", "tw-tip", TIP_TEXT);
+  const tip = el("span", "tw-tip", text);
   s.appendChild(tip);
   // Position on show: fixed + clamped to the viewport (the panel sits at the
   // screen edge, where a centered absolute tip clips off-screen).
@@ -75,7 +77,7 @@ const PUBLISH_TOASTS = {
 };
 // `read`/`write` are passed in because the three rows read from three different
 // places (two localStorage keys and the accounts module).
-function segRow(label, key, options, withTip, read, write) {
+function segRow(label, key, options, tipText, read, write) {
   const row = el("div", "tw-seg-row");
   row.dataset.key = key;
   row.appendChild(el("span", "tw-toggle-t", label));
@@ -96,7 +98,7 @@ function segRow(label, key, options, withTip, read, write) {
     seg.appendChild(b);
   }
   row.appendChild(seg);
-  if (withTip) row.appendChild(infoTip());
+  if (tipText) row.appendChild(infoTip(tipText));
   return row;
 }
 const PUB_KEY = "tw:publishto";
@@ -105,12 +107,12 @@ function settingsBlock(compact) {
   const box = el("div", "tw-settings");
   box.appendChild(segRow("Highlights", MODE_KEY, [
     { v: "private", label: "Private" }, { v: "public", label: "Public" }, { v: "off", label: "Off" },
-  ], true, syncMode, (v) => setMode(MODE_KEY, v)));
+  ], TIP_TEXT, syncMode, (v) => setMode(MODE_KEY, v)));
   // The shared LAYER (other readers' public highlights) — kept reachable here
   // so a reader who turned it off in the shared panel can find their way back.
   box.appendChild(segRow("Readers' highlights", SHARED_VIEW_KEY, [
     { v: "on", label: "On" }, { v: "off", label: "Off" },
-  ], false, () => (shared.isOn() ? "on" : "off"), (v) => shared.setOn(v === "on")));
+  ], SHARED_VIEW_TIP, () => (shared.isOn() ? "on" : "off"), (v) => shared.setOn(v === "on")));
   // Only meaningful with two identities connected — with one there is nowhere else
   // for a highlight to go, and the row would be a control that does nothing.
   if (acct.hasBoth()) {
@@ -168,7 +170,7 @@ async function refreshPkShare() {
 function shareRow() {
   const row = el("div", "tw-seg-row");
   row.dataset.key = "pkshare";
-  row.appendChild(el("span", "tw-toggle-t", "Shared layer"));
+  row.appendChild(el("span", "tw-toggle-t", "Share mine"));
   const seg = el("div", "tw-seg");
   const cur = pkShare === null ? pkShareCached() : pkShare;
   let busy = false;
@@ -204,6 +206,7 @@ function shareRow() {
     seg.appendChild(b);
   }
   row.appendChild(seg);
+  row.appendChild(infoTip(SHARE_MINE_TIP));
   return row;
 }
 
@@ -371,7 +374,7 @@ panel.innerHTML = `
   </div>
   <div class="tw-auth"></div>
   <div class="tw-list"></div>
-  <div class="tw-p-foot">Signed out, highlights and notes stay on this device — private. Signed in, they save to your own Nostr or Pubky account as you make them — you can connect both, and choose where new ones go. "Suggest" sends your note to the wiki's editors — privately (encrypted DM) or publicly, your choice. The Highlights setting picks the default for new highlights: Private (readable only by you), Public (visible to others), or Off; every card can override it.</div>`;
+  <div class="tw-p-foot">Your highlights save to your own account, never to us. The Highlights setting is the default for new ones — every card can override it. "Suggest" sends a note to the wiki's editors. The ⓘ on each row has the details.</div>`;
 document.body.appendChild(panel);
 
 const fab = el("button", "tw-fab");
@@ -1009,13 +1012,16 @@ function renderAuth() {
     // hidden from Pubky users as it used to be.
     box.appendChild(settingsBlock(false));
     if (acct.hasPubky()) {
-      box.appendChild(el("div", "tw-pk-note", pubkyPrivateReady
-        ? "Pubky highlights live on your own homeserver — Public in its world-readable area, Private in its authenticated one (which your homeserver's operator can still read). Pubky ships private storage as experimental and may change it, so a copy always stays on this device. Suggestions travel over Nostr."
-        : pubkyPrivateServerNo
-          ? "Your homeserver doesn't offer Pubky's private storage yet (it's an experimental feature many don't enable), so Pubky highlights are either Public or stay on this device. Private still works on Nostr if you connect one. Suggestions travel over Nostr."
-          : "Your Pubky sign-in predates private storage, so Pubky highlights are public. Sign out and in again to enable Private. Suggestions travel over Nostr."));
       box.appendChild(shareRow());
-      box.appendChild(el("div", "tw-pk-note", "Shared layer: other readers can see public highlights on these pages. Your public Pubky highlights are included only while you're In — the site can't find them otherwise, and going Out drops them on the next nightly sweep. (Public Nostr highlights live on open relays, so those appear in the shared layer without an opt-in — that's what public means on Nostr.)"));
+      // The explanations live behind each row's ⓘ — inline text is reserved for
+      // the one situational warning a reader must not miss. (Two paragraphs of
+      // standing explanation used to sit here and pushed the highlight list
+      // clean off a phone screen.)
+      if (pubkyPrivateServerNo) {
+        box.appendChild(el("div", "tw-pk-note", "Your homeserver doesn't offer Private yet — Private highlights stay on this device."));
+      } else if (!pubkyPrivateReady) {
+        box.appendChild(el("div", "tw-pk-note", "Sign out and in again to enable Private on Pubky."));
+      }
       refreshPkShare();
     }
     // Offer to connect the rail they don't have yet — this is the only place the
