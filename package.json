@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "sync": "python3 sync-kb.py",
+    "sync": "python3 sync-kb.py && node scripts/gen-nav-rank.mjs",
     "dev": "astro dev",
     "build": "npm run sync && astro build && pagefind --site dist",
     "preview": "astro preview",

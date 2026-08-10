@@ -92,6 +92,28 @@ export async function renderAllHighlights() {
   const ordered = [...groups.entries()].sort((a, b) =>
     Math.max(...b[1].map((h) => h.createdAt || 0)) - Math.max(...a[1].map((h) => h.createdAt || 0)));
 
+  // instant filter over quote, note, and entry title — plain DOM show/hide
+  if (all.length > 1) {
+    const search = el("input", "hl-search");
+    search.type = "search";
+    search.placeholder = "Search your highlights…";
+    search.setAttribute("aria-label", "Search your highlights");
+    search.addEventListener("input", () => {
+      const q = search.value.trim().toLowerCase();
+      for (const sec of box.querySelectorAll(".hl-group")) {
+        const inTitle = (sec.querySelector("h2")?.textContent || "").toLowerCase().includes(q);
+        let any = false;
+        for (const card of sec.querySelectorAll(".hl-card")) {
+          const show = !q || inTitle || card.textContent.toLowerCase().includes(q);
+          card.style.display = show ? "" : "none";
+          if (show) any = true;
+        }
+        sec.style.display = any ? "" : "none";
+      }
+    });
+    box.appendChild(search);
+  }
+
   const count = el("p", "hl-note", `${all.length} highlight${all.length === 1 ? "" : "s"} across ${ordered.length} entr${ordered.length === 1 ? "y" : "ies"}.`);
   box.appendChild(count);
 

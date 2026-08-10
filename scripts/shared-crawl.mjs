@@ -138,6 +138,12 @@ const state = readJson(stateFile, { v: 1, registry: {}, lastGood: { nostr: [], p
 // state.blocked never enter the baked output, whatever the rails return.
 state.blocked = state.blocked || [];
 const queue = readJson(queueFile, { v: 1, notes: [] });
+// Suggestions arriving over the Pubky rail (written into the reader's own
+// homeserver; collected here, staged onto the vault Suggestions desk by
+// notes-sync). Never baked into the site — they are editorial input only.
+const suggFile = join(STATE_DIR, "suggestions-queue.json");
+const suggQueue = readJson(suggFile, { v: 1, items: [] });
+const SUGG_PER_KEY_MAX = 10, SUGG_TEXT_MAX = 4000;
 
 const pool = new SimplePool();
 
@@ -294,8 +300,41 @@ async function sweepPubky() {
     }
     perKey[z] = items;
     log(`pubky ${z.slice(0, 8)}…: ${items.length} valid item(s)`);
+
+    // 3. suggestions this reader left in their own homeserver for the wiki
+    await collectSuggestions(pub, z);
   }
   return perKey;
+}
+
+async function collectSuggestions(pub, z) {
+  let urls = null;
+  try { urls = await withTimeout(pub.list(`pubky://${z}/pub/${APP}/suggestions/`), 20000, `sugg ${z.slice(0, 8)}`); }
+  catch (e) { if (isAbsent(e)) return; }
+  if (!urls) return;   // did not answer — retry tomorrow, never assume empty
+  const files = urls.filter((u) => u.endsWith(".json"));
+  if (files.length > SUGG_PER_KEY_MAX) log(`pubky ${z.slice(0, 8)}…: ${files.length} suggestions, capping at ${SUGG_PER_KEY_MAX}`);
+  const seen = new Set(suggQueue.items.map((s) => s.key));
+  let picked = 0;
+  for (const u of files.slice(0, SUGG_PER_KEY_MAX)) {
+    let rec = null;
+    try { rec = await withTimeout(pub.getJson(u), 15000, "sugg record"); } catch {}
+    if (!rec || typeof rec.text !== "string" || !rec.text.trim()) continue;
+    const path = (typeof rec.url === "string" ? rec.url.replace(/\/$/, "") : "") || "";
+    if (!KNOWN.has(path)) continue;
+    const key = sha1(`sugg|${z}|${rec.id || u}|${rec.text}`);
+    if (seen.has(key)) continue;
+    suggQueue.items.push({
+      key, pubky: z, path,
+      exact: String(rec.exact || "").slice(0, EXACT_MAX),
+      text: rec.text.slice(0, SUGG_TEXT_MAX),
+      createdAt: Number(rec.createdAt) || Date.now(),
+      seenAt: Date.now(),
+    });
+    seen.add(key);
+    picked++;
+  }
+  if (picked) log(`pubky ${z.slice(0, 8)}…: ${picked} new suggestion(s) queued for the desk`);
 }
 
 // ── profiles ──────────────────────────────────────────────────────────────
@@ -438,6 +477,7 @@ try {
   for (const z of Object.keys(state.lastGood.pubky)) if (state.registry[z]?.optedOut) delete state.lastGood.pubky[z];
   writeJsonAtomic(stateFile, state);
   writeJsonAtomic(queueFile, queue);
+  writeJsonAtomic(suggFile, suggQueue);
 
   const pending = queue.notes.filter((n) => n.status === "pending").length;
   log(`baked ${total} highlight(s) across ${pages} page(s); ${queued} new note(s) queued, ${pending} pending review`);

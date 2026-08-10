@@ -7,6 +7,7 @@ import { describe, resolve, hitTest } from "./anchor.js";
 import * as store from "./store.js";
 import * as acct from "./accounts.js";
 import * as shared from "./shared.js";
+import navRank from "./nav-rank.generated.json";
 
 let root = null;
 let list = [];
@@ -32,7 +33,7 @@ function syncMode() {
 function sugMode() { try { return localStorage.getItem(SUG_KEY) || "private"; } catch { return "private"; } }
 const setMode = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
 
-const TIP_TEXT = "One setting for every connected account. Private on Nostr stores highlights + notes as encrypted app data on relays (NIP-78, kind 30078) — synced across your devices, readable only by you, never shown in anyone's feed; it needs a signer that supports encryption (most modern extensions + Amber do). Private on Pubky writes to the authenticated area of your homeserver: no other user can read it, but whoever operates your homeserver can — access-controlled rather than encrypted, and experimental, so a copy always stays on this device. Some homeservers don't enable it yet; if yours refuses, Private highlights simply stay on this device. Public on Nostr uses the highlight format (NIP-84, kind 9802), so apps like Amethyst or Highlighter show these on your profile; Public on Pubky writes to the world-readable area of your homeserver. Public highlights join this site's social layer for other readers — on Pubky, publishing publicly through this site is also what adds your key to the site's opt-in reading list; make your highlights private to withdraw them. Off keeps everything on this device. You can connect both accounts at once — Publish to then chooses where new highlights go, and writing to both links the two records so other readers see one person, not two. Suggestions always travel over Nostr, since Pubky has no way to receive a message.";
+const TIP_TEXT = "One setting for every connected account. Private on Nostr stores highlights + notes as encrypted app data on relays (NIP-78, kind 30078) — synced across your devices, readable only by you, never shown in anyone's feed; it needs a signer that supports encryption (most modern extensions + Amber do). Private on Pubky writes to the authenticated area of your homeserver: no other user can read it, but whoever operates your homeserver can — access-controlled rather than encrypted, and experimental, so a copy always stays on this device. Some homeservers don't enable it yet; if yours refuses, Private highlights simply stay on this device. Public on Nostr uses the highlight format (NIP-84, kind 9802), so apps like Amethyst or Highlighter show these on your profile; Public on Pubky writes to the world-readable area of your homeserver. Public highlights join this site's social layer for other readers — on Pubky, publishing publicly through this site is also what adds your key to the site's opt-in reading list; make your highlights private to withdraw them. Off keeps everything on this device. You can connect both accounts at once — Publish to then chooses where new highlights go, and writing to both links the two records so other readers see one person, not two. Suggestions prefer Nostr (instant, with a private option); with only Pubky connected they save to your homeserver and the editors collect them overnight.";
 const SHARED_VIEW_TIP = "Shows public highlights other readers left on these pages — marked in a different color, with any notes in a side panel. Refreshed nightly. Off hides them and shows only your own.";
 function infoTip(text) {
   const s = el("span", "tw-info");
@@ -305,13 +306,25 @@ const panel = el("aside", "tw-panel");
 panel.hidden = true;
 panel.innerHTML = `
   <div class="tw-p-head">
-    <div><b>Your highlights</b><span class="tw-count">0</span><a class="tw-all-link" href="/highlights">All pages →</a></div>
-    <button type="button" class="tw-x" aria-label="Close">✕</button>
+    <div><b>Your highlights</b><a class="tw-all-link" href="/highlights">All pages →</a></div>
+    <div class="tw-p-actions">
+      <button type="button" class="tw-x tw-cog" aria-label="Settings" title="Settings"><svg width="17" height="17" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3.2" stroke="currentColor" stroke-width="1.8"/><path d="M12 2.8v3M12 18.2v3M2.8 12h3M18.2 12h3M5.5 5.5l2.1 2.1M16.4 16.4l2.1 2.1M18.5 5.5l-2.1 2.1M7.6 16.4l-2.1 2.1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+      <button type="button" class="tw-x tw-close" aria-label="Close">✕</button>
+    </div>
   </div>
-  <div class="tw-auth"></div>
+  <div class="tw-drawer" hidden>
+    <div class="tw-drawer-head"><b>Settings</b><button type="button" class="tw-x tw-drawer-x" aria-label="Close settings">✕</button></div>
+    <div class="tw-auth"></div>
+  </div>
   <div class="tw-list"></div>
-  <div class="tw-p-foot">Your highlights save to your own account, never to us. The Highlights setting is the default for new ones — every card can override it. "Suggest" sends a note to the wiki's editors. The ⓘ on each row has the details.</div>`;
+  <div class="tw-p-foot">Your highlights save to your own account, never to us. Defaults live behind the ⚙ — each card can override them. "Suggest" sends a note to the wiki's editors.</div>`;
 document.body.appendChild(panel);
+const drawer = panel.querySelector(".tw-drawer");
+panel.querySelector(".tw-cog").addEventListener("click", () => {
+  drawer.hidden = !drawer.hidden;
+  if (!drawer.hidden) renderAuth();
+});
+panel.querySelector(".tw-drawer-x").addEventListener("click", () => { drawer.hidden = true; });
 
 const fab = el("button", "tw-fab");
 fab.type = "button";
@@ -328,7 +341,6 @@ function updateFab() {
   // this-page / whole-wiki, so a page with none still shows the collection
   // exists ("0/1"); the badge only disappears when there's nothing anywhere.
   fab.querySelector(".tw-fab-n").textContent = total > 0 ? `${n}/${total}` : "";
-  panel.querySelector(".tw-count").textContent = total > n ? `${n} here · ${total} on the wiki` : n;
 }
 
 // Every highlight this DEVICE knows about on other pages — the local store is
@@ -354,6 +366,27 @@ function pageLabel(url) {
   if (!slug) return url === "/" ? "Home" : url;
   const s = slug.replace(/-/g, " ");
   return s.charAt(0).toUpperCase() + s.slice(1);
+}
+function pageTitle() {
+  const h1 = root && document.querySelector("h1");
+  return (h1 && h1.textContent.trim()) || document.title.replace(/\s*—\s*TimechainWiki.*$/, "");
+}
+
+// Nav-hierarchical order for the Other-pages section: same cluster as the
+// current article first, then the same section, then the rest of the wiki in
+// walk order; pages outside the cluster nav (thinkers, sources) come last,
+// alphabetically. Rank data is generated from the sections tree at build time.
+const rankOf = (url) => { const slug = (url.match(/^\/wiki\/(.+)$/) || [])[1]; return (slug && navRank[slug]) || null; };
+function hierCompare() {
+  const cr = rankOf(store.pageUrl());
+  const groupOf = (r) => (!r || !cr) ? 3 : (r[0] === cr[0] && r[1] === cr[1]) ? 0 : r[0] === cr[0] ? 1 : 2;
+  return (a, b) => {
+    const ra = rankOf(a.url), rb = rankOf(b.url);
+    const ga = groupOf(ra), gb = groupOf(rb);
+    if (ga !== gb) return ga - gb;
+    if (ra && rb) return (ra[0] - rb[0]) || (ra[1] - rb[1]) || (ra[2] - rb[2]) || ((a.anchor?.pos ?? 0) - (b.anchor?.pos ?? 0));
+    return a.url < b.url ? -1 : a.url > b.url ? 1 : 0;
+  };
 }
 
 // Card status vocabulary — the ✓ marks a state that is already saved where it
@@ -413,8 +446,25 @@ function renderPanel() {
   renderAuth();
   const box = panel.querySelector(".tw-list");
   box.innerHTML = "";
+
+  // Action strip — the panel's one contextual doing-button. Settings live
+  // behind the ⚙; this is what you might actually need right now.
+  if (!signedIn()) {
+    const b = el("button", "tw-syncbtn ghost", "Sign in to sync across devices");
+    b.addEventListener("click", openSignin);
+    box.appendChild(b);
+  } else {
+    const unpublished = list.filter((h) => h.source === "local").length;
+    if (unpublished > 0) {
+      const b = el("button", "tw-syncbtn", `Publish ${unpublished} to ${destLabel()} (public)`);
+      b.addEventListener("click", () => publishAll(b));
+      box.appendChild(b);
+    }
+  }
+
+  box.appendChild(el("div", "tw-page-h", pageTitle()));
   if (!list.length) {
-    box.appendChild(el("p", "tw-empty", "No highlights on this page yet. Select any text in the article to highlight it."));
+    box.appendChild(el("p", "tw-empty-line", "None on this page yet — select any text in the article to highlight it."));
   }
   for (const h of list) {
     const item = el("div", "tw-item" + (h.id === activeId ? " on" : ""));
@@ -536,7 +586,7 @@ function renderPanel() {
   // Everything else this device knows about, below a separator — read-only
   // cards that jump to their page (deep link re-activates the highlight there).
   // Editing stays on the owning page, where anchors resolve and saves land.
-  const others = otherPages();
+  const others = otherPages().sort(hierCompare());
   if (others.length) {
     box.appendChild(el("div", "tw-oth-sep", "Other pages"));
     for (const h of others) {
@@ -808,45 +858,69 @@ async function suggestOne(id, btn) {
     ta && ta.focus();
     return;
   }
-  // Suggestions need a Nostr key: Pubky has no inbound-message primitive, so
-  // there is no way to deliver one to the editors over that rail. A reader with
-  // both connected can suggest even if their highlights publish to Pubky.
-  if (!acct.hasNostr()) {
-    toast(signedIn()
-      ? "Suggestions travel over Nostr, and Pubky can't receive messages yet — connect a Nostr signer to send one."
-      : "Suggestions are sent signed by you — sign in with Nostr first.", signedIn());
-    if (!signedIn()) openSignin();
+  // Nostr is the preferred rail (instant, with a private variant). A
+  // Pubky-only reader writes the suggestion into their OWN homeserver instead
+  // and the wiki's nightly sweep collects it — slower, but it works, rather
+  // than a dead end telling them to go get a different identity.
+  if (!signedIn()) {
+    toast("Suggestions are sent signed by you — sign in first.");
+    openSignin();
     return;
   }
-  const n = await nlib();
-  const canPriv = n.canEncrypt();
+  const viaNostr = acct.hasNostr();
+  const payload = { exact: h.anchor.exact, text, path: store.pageUrl() };
+  if (viaNostr) {
+    const n = await nlib();
+    const canPriv = n.canEncrypt();
+    const res = await askConfirm({
+      title: "Send this to the wiki?",
+      desc: "Every suggestion is reviewed by hand before anything changes.",
+      quote: h.anchor.exact,
+      note: text,
+      confirmText: "Send suggestion",
+      choice: {
+        def: canPriv ? sugMode() : "public",
+        options: [
+          { v: "private", label: "Privately", hint: "Encrypted DM to the editors — nothing on your feed; sender hidden from relays.", disabled: !canPriv },
+          { v: "public", label: "Publicly", hint: "A regular Nostr note on your feed, signed as you." },
+        ],
+      },
+    });
+    if (!res || !res.ok) return;
+    btn.disabled = true; btn.textContent = "Sending…";
+    try {
+      const evId = res.choice === "private"
+        ? await n.publishSuggestionPrivate(payload)
+        : await n.publishSuggestion(payload);
+      store.upsert({ id, suggestedAt: Date.now(), suggestedEvent: evId, suggestedVia: res.choice });
+      list = store.all();
+      renderPanel();
+      toast(res.choice === "private"
+        ? "Suggestion sent privately — thank you. The editors read every one."
+        : "Suggestion sent — thank you. The editors read every one.");
+    } catch (e) {
+      toast("Couldn't send the suggestion: " + (e.message || e), true);
+      btn.disabled = false; btn.textContent = "Suggest";
+    }
+    return;
+  }
+  // Pubky rail
   const res = await askConfirm({
     title: "Send this to the wiki?",
-    desc: "Every suggestion is reviewed by hand before anything changes.",
+    desc: "Saves to the public area of your homeserver; the editors collect suggestions overnight, so allow a day. Every one is reviewed by hand before anything changes.",
     quote: h.anchor.exact,
     note: text,
     confirmText: "Send suggestion",
-    choice: {
-      def: canPriv ? sugMode() : "public",
-      options: [
-        { v: "private", label: "Privately", hint: "Encrypted DM to the editors — nothing on your feed; sender hidden from relays.", disabled: !canPriv },
-        { v: "public", label: "Publicly", hint: "A regular Nostr note on your feed, signed as you." },
-      ],
-    },
   });
   if (!res || !res.ok) return;
   btn.disabled = true; btn.textContent = "Sending…";
   try {
-    const payload = { exact: h.anchor.exact, text, path: store.pageUrl() };
-    const evId = res.choice === "private"
-      ? await n.publishSuggestionPrivate(payload)
-      : await n.publishSuggestion(payload);
-    store.upsert({ id, suggestedAt: Date.now(), suggestedEvent: evId, suggestedVia: res.choice });
+    const p = await plib();
+    const sid = await p.publishSuggestion(payload);
+    store.upsert({ id, suggestedAt: Date.now(), suggestedEvent: sid, suggestedVia: "pubky" });
     list = store.all();
     renderPanel();
-    toast(res.choice === "private"
-      ? "Suggestion sent privately — thank you. The editors read every one."
-      : "Suggestion sent — thank you. The editors read every one.");
+    toast("Suggestion saved to your homeserver — the editors collect these nightly and read every one.");
   } catch (e) {
     toast("Couldn't send the suggestion: " + (e.message || e), true);
     btn.disabled = false; btn.textContent = "Suggest";
@@ -988,42 +1062,34 @@ async function doLogoutAll() {
 function renderAuth() {
   const box = panel.querySelector(".tw-auth");
   if (!box) return;
+  // This renders the ⚙ settings drawer only — set-once defaults, out of the
+  // way of the list. Contextual actions (sign in, publish N) live in the list.
   if (signedIn()) {
-    const unpublished = list.filter((h) => h.source === "local").length;
     // Always name the network(s) — with two rails in play, a bare name doesn't
     // tell the reader where their highlights actually live.
     const railNames = acct.rails().map((r) => (r === "pubky" ? "Pubky" : "Nostr")).join(" + ");
     box.innerHTML = `<div class="tw-signed"><span class="dot on"></span>Signed in · <b>${userLabel()}</b> · ${railNames}</div>`;
-    // The settings block now carries the Publish-to row when both rails are
-    // connected, so it is shown for every signed-in reader rather than being
-    // hidden from Pubky users as it used to be.
     box.appendChild(settingsBlock(false));
     if (acct.hasPubky()) {
-      // The explanations live behind each row's ⓘ — inline text is reserved for
-      // the one situational warning a reader must not miss. (Two paragraphs of
-      // standing explanation used to sit here and pushed the highlight list
-      // clean off a phone screen.)
+      // Inline text is reserved for the one situational warning that matters.
       if (pubkyPrivateServerNo) {
         box.appendChild(el("div", "tw-pk-note", "Your homeserver doesn't offer Private yet — Private highlights stay on this device."));
       } else if (!pubkyPrivateReady) {
         box.appendChild(el("div", "tw-pk-note", "Sign out and in again to enable Private on Pubky."));
       }
     }
-    // Offer to connect the rail they don't have yet — this is the only place the
-    // second identity is discoverable once you're already signed in.
+    // The rail they don't have yet — also offered in the account dialog.
     if (!acct.hasBoth()) {
       const add = el("button", "tw-syncbtn ghost", acct.hasPubky() ? "Also connect Nostr" : "Also connect Pubky");
       add.addEventListener("click", () => { showSigninModal(); });
       box.appendChild(add);
     }
-    if (unpublished > 0) {
-      const b = el("button", "tw-syncbtn", `Publish ${unpublished} to ${destLabel()} (public)`);
-      b.addEventListener("click", () => publishAll(b));
-      box.appendChild(b);
-    }
   } else {
-    box.innerHTML = `<button type="button" class="tw-syncbtn ghost">Sign in to sync across devices</button>`;
-    box.querySelector("button").addEventListener("click", openSignin);
+    box.innerHTML = "";
+    box.appendChild(settingsBlock(false));
+    const b = el("button", "tw-syncbtn ghost", "Sign in to sync across devices");
+    b.addEventListener("click", openSignin);
+    box.appendChild(b);
   }
 }
 
@@ -1140,7 +1206,7 @@ export async function init() {
   positionFab();
 
   fab.addEventListener("click", () => (panel.hidden ? openPanel() : closePanel()));
-  panel.querySelector(".tw-x").addEventListener("click", (e) => { e.stopPropagation(); closePanel(); });
+  panel.querySelector(".tw-close").addEventListener("click", (e) => { e.stopPropagation(); closePanel(); });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !panel.hidden) closePanel(); });
 
   // Selection → popover. `selectionchange` (debounced) is the mobile-safe trigger:

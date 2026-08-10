@@ -234,6 +234,22 @@ export function userId() {
   return session ? session.info.publicKey.toString().replace(/^pubky:?/, "") : null;
 }
 
+// Suggestions over the Pubky rail. Pubky has no way to SEND anyone a message,
+// so the suggestion is written into the reader's OWN homeserver and the wiki's
+// nightly sweep collects it from registered keys — same phone book, same
+// consent mechanics as shared highlights (the marker+hint ride along). The
+// honest trade-off vs the Nostr path: nightly latency instead of hourly, and
+// no private variant (a record we can read is by definition not private).
+export async function publishSuggestion({ exact, text, path }) {
+  if (!session) throw new Error("not-signed-in");
+  const id = "s-" + Math.random().toString(36).slice(2) + Date.now().toString(36);
+  await session.storage.putJson(`/pub/${APP}/suggestions/${id}.json`, {
+    id, url: path, exact: String(exact || ""), text: String(text || ""), createdAt: Date.now(),
+  });
+  ensureSharedMarker().catch(() => {});
+  return id;
+}
+
 const toPath = (u) => (u.startsWith("pubky://") ? u.replace(/^pubky:\/\/[^/]+/, "") : (u.startsWith("/pub/") ? u : null));
 
 // Resolve a pubky.app profile `image` value to a displayable URL. In pubky.app an
