@@ -383,6 +383,12 @@ body.tw-selecting .tw-fab{visibility:hidden}
 .tw-sh-via{font-family:var(--mono);font-size:10.5px;flex:none}
 .tw-sh-when{margin-left:auto;font-size:11px;flex:none}
 
+/* the panel's Other-pages section: read-only cards that jump to their page */
+.tw-oth-sep{font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-faint);padding:10px 2px 2px;border-top:1px solid var(--line-soft);margin-top:6px}
+.tw-oth-note{margin:0 0 9px;font-size:13px;line-height:1.5;color:var(--ink-soft)}
+.tw-oth-page{font-size:12px;font-weight:600;color:var(--brass);text-decoration:none}
+.tw-oth-page:hover{text-decoration:underline}
+
 /* sign-in chooser: a rail you already have is shown connected, not re-offered */
 .tw-sect-badge{font-family:var(--mono);font-size:10px;letter-spacing:.06em;color:var(--sage);margin-left:8px}
 .tw-sect-connected .tw-signin-opts button{opacity:.4;cursor:default;pointer-events:none}

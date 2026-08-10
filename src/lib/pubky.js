@@ -169,6 +169,7 @@ export async function publish(hl, key, link, priv) {
     }
     throw e;
   }
+  if (!priv) ensureSharedMarker().catch(() => {});
   return hl.id;
 }
 
@@ -211,6 +212,22 @@ export async function setShared(on) {
   if (on) await session.storage.putJson(SHARE_FILE, { v: 1, share: true, since: Date.now() });
   else await session.storage.delete(SHARE_FILE);
   return on;
+}
+
+// Publishing a PUBLIC highlight through this site is the opt-in (the UI says
+// so): the phone-book marker and the relay hint ride along automatically, once
+// per identity rather than per highlight. The flag is set only after both
+// landed, so a failure retries on the next public publish. Withdrawing =
+// making highlights private again: the crawler lists actual public records,
+// so an empty public folder shows nothing regardless of the marker.
+async function ensureSharedMarker() {
+  const id = userId();
+  if (!id) return;
+  const K = "tw:pkshared:" + id;
+  try { if (localStorage.getItem(K) === "1") return; } catch {}
+  await session.storage.putJson(SHARE_FILE, { v: 1, share: true, since: Date.now() });
+  await (await import("./nostr.js")).publishPubkyShareHint(id);
+  try { localStorage.setItem(K, "1"); } catch {}
 }
 
 export function userId() {

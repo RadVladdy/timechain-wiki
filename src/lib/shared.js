@@ -79,7 +79,7 @@ function buildPanel() {
   panel.hidden = true;
   panel.innerHTML = `
     <div class="tw-p-head">
-      <div><b>Readers' highlights</b><span class="tw-count">0</span></div>
+      <div><b>Social highlights</b><span class="tw-count">0</span></div>
       <button type="button" class="tw-x" aria-label="Close">✕</button>
     </div>
     <div class="tw-sh-toggle"></div>
@@ -90,7 +90,7 @@ function buildPanel() {
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !panel.hidden) close(); });
 
   const row = el("div", "tw-seg-row");
-  row.appendChild(el("span", "tw-toggle-t", "Shared layer"));
+  row.appendChild(el("span", "tw-toggle-t", "Social highlights"));
   const seg = el("div", "tw-seg");
   for (const o of [{ v: true, label: "On" }, { v: false, label: "Off" }]) {
     const b = el("button", "tw-seg-b" + (o.v === isOn() ? " on" : ""), o.label);
@@ -122,7 +122,7 @@ function renderPanel() {
   const box = p.querySelector(".tw-list");
   box.innerHTML = "";
   if (!isOn()) {
-    box.appendChild(el("p", "tw-empty", "The shared layer is off. Turn it on to see what other readers highlighted on these pages."));
+    box.appendChild(el("p", "tw-empty", "Social highlights are off. Turn them on to see what other readers highlighted on these pages."));
     return;
   }
   if (!list.length) {
