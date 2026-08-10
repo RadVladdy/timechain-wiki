@@ -324,8 +324,10 @@ function openPanel() { shared.close(); panel.hidden = false; renderPanel(); }
 function closePanel() { panel.hidden = true; activeId = null; lastClose = Date.now(); paint(); }
 function updateFab() {
   const n = list.length;
-  fab.querySelector(".tw-fab-n").textContent = n > 0 ? n : "";
   const total = n + otherPages().length;
+  // this-page / whole-wiki, so a page with none still shows the collection
+  // exists ("0/1"); the badge only disappears when there's nothing anywhere.
+  fab.querySelector(".tw-fab-n").textContent = total > 0 ? `${n}/${total}` : "";
   panel.querySelector(".tw-count").textContent = total > n ? `${n} here · ${total} on the wiki` : n;
 }
 
