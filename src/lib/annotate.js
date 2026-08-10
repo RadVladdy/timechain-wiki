@@ -613,6 +613,22 @@ signinModal.innerHTML = `
 document.body.appendChild(signinModal);
 signinModal.querySelector(".tw-si-toggle").appendChild(settingsBlock(true));
 function closeSignin() { signinModal.hidden = true; }
+
+// Show the sign-in chooser with already-connected rails marked and disabled —
+// a reader adding their second identity must not be offered a re-login to the
+// one they already have (completing that flow would just be discarded).
+function showSigninModal() {
+  for (const sect of signinModal.querySelectorAll(".tw-signin-sect")) {
+    const rail = sect.querySelector('[data-m="pubky"]') ? "pubky" : "nostr";
+    const on = !!acct.get(rail);
+    sect.classList.toggle("tw-sect-connected", on);
+    sect.querySelectorAll("button[data-m]").forEach((b) => { b.disabled = on; });
+    let badge = sect.querySelector(".tw-sect-badge");
+    if (on && !badge) sect.querySelector(".tw-signin-label").appendChild(el("span", "tw-sect-badge", "connected ✓"));
+    else if (!on && badge) badge.remove();
+  }
+  signinModal.hidden = false;
+}
 signinModal.querySelectorAll("[data-siclose]").forEach((e) => e.addEventListener("click", closeSignin));
 signinModal.querySelectorAll("button[data-m]").forEach((b) => b.addEventListener("click", () => { closeSignin(); doLogin(b.dataset.m); }));
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !signinModal.hidden) closeSignin(); });
@@ -672,12 +688,27 @@ async function openAccount() {
     ? `New highlights go to ${destLabel()} as you make them, and stay on this device too. Change that in the highlights panel.`
     : `New highlights publish to your account as you make them — publicly. They also stay on this device.`;
 
+  // The second identity must be discoverable HERE — this dialog is where a
+  // signed-in reader naturally looks, and the panel's button alone wasn't found.
+  let add = accountModal.querySelector(".tw-acc-add");
+  if (!acct.hasBoth()) {
+    if (!add) {
+      add = el("button", "tw-syncbtn ghost tw-acc-add", "");
+      accountModal.querySelector(".tw-acc-all").before(add);
+      add.addEventListener("click", () => { closeAccount(); showSigninModal(); });
+    }
+    add.textContent = acct.hasPubky() ? "Also connect Nostr" : "Also connect Pubky";
+    add.hidden = false;
+  } else if (add) {
+    add.hidden = true;
+  }
+
   accountModal.hidden = false;
   // Fetch names/avatars once, lazily — a rail whose profile we've never looked up.
   if (connected.some((r) => acct.get(r).name === undefined)) acct.loadProfiles().then(afterProfile);
 }
 
-function openSignin() { if (signedIn()) { openAccount(); return; } signinModal.hidden = false; }
+function openSignin() { if (signedIn()) { openAccount(); return; } showSigninModal(); }
 
 // A styled input dialog — replaces the browser's native prompt() so every popup
 // matches the site. askInput() resolves to the trimmed value or null (cancel).
@@ -991,7 +1022,7 @@ function renderAuth() {
     // second identity is discoverable once you're already signed in.
     if (!acct.hasBoth()) {
       const add = el("button", "tw-syncbtn ghost", acct.hasPubky() ? "Also connect Nostr" : "Also connect Pubky");
-      add.addEventListener("click", () => { signinModal.hidden = false; });
+      add.addEventListener("click", () => { showSigninModal(); });
       box.appendChild(add);
     }
     if (unpublished > 0) {

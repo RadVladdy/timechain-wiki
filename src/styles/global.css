@@ -382,6 +382,10 @@ body.tw-selecting .tw-fab{visibility:hidden}
 .tw-sh-av{width:20px;height:20px;border-radius:50%;background-size:cover;background-position:center;flex:none;border:1px solid var(--line-soft)}
 .tw-sh-via{font-family:var(--mono);font-size:10.5px;flex:none}
 .tw-sh-when{margin-left:auto;font-size:11px;flex:none}
+
+/* sign-in chooser: a rail you already have is shown connected, not re-offered */
+.tw-sect-badge{font-family:var(--mono);font-size:10px;letter-spacing:.06em;color:var(--sage);margin-left:8px}
+.tw-sect-connected .tw-signin-opts button{opacity:.4;cursor:default;pointer-events:none}
 /* storage-state line: plain text + dot, deliberately not button-shaped */
 .tw-status{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10.5px;letter-spacing:.04em;color:var(--ink-faint);cursor:default}
 .tw-status-dot{width:6px;height:6px;border-radius:50%;background:var(--ink-faint);flex:none}
