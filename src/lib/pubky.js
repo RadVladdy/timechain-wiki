@@ -3,11 +3,15 @@
 // at /pub/timechain.wiki/highlights/<pathKey>/<id>.json, so they follow the
 // reader across devices. Lazy-loaded by the annotation controller: the SDK is a
 // ~1.7 MB WASM bundle, kept off the page for anyone who isn't using Pubky.
-import { Pubky, AuthFlowKind, Session } from "@synonymdev/pubky";
+import { Pubky, AuthFlowKind } from "@synonymdev/pubky";
 import qrcode from "qrcode-generator";
 
 const APP = "timechain.wiki";
-const CAPS = `/pub/${APP}/:rw`;          // read/write our app's dir on the homeserver
+// Two namespaces, both requested at sign-in: `/pub/` is world-readable (the
+// social model), `/priv/` is readable ONLY by the owner — verified against our
+// own homeserver 2026-08-10: an anonymous HTTP read gets 401, the public storage
+// API refuses it, and a DIFFERENT signed-in user is refused too.
+const CAPS = `/pub/${APP}/:rw,/priv/${APP}/:rw`;
 const AUTH_KEY = "tw:pubky";
 
 let pubky = null;   // Pubky facade client
@@ -29,10 +33,21 @@ export function shortId(pk) {
 export function pageKey(path) {
   return path.replace(/^\/|\/$/g, "").replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "home";
 }
-const dir = (k) => `/pub/${APP}/highlights/${k}/`;
-const file = (k, id) => `/pub/${APP}/highlights/${k}/${id}.json`;
+const dir = (k, priv) => `${priv ? "/priv" : "/pub"}/${APP}/highlights/${k}/`;
+const file = (k, id, priv) => dir(k, priv) + id + ".json";
 
 export function hasSession() { return !!session; }
+
+// Whether THIS session may use the private namespace. Sessions created before
+// private storage existed were granted `/pub/` only, so they must not be offered
+// a private option that would fail on write — the reader re-approves in Pubky
+// Ring to upgrade, and until then private simply isn't available to them.
+export function canPrivate() {
+  if (!session) return false;
+  try {
+    return (session.info.capabilities || []).some((c) => c.startsWith("/priv/") && c.includes("w"));
+  } catch { return false; }
+}
 
 // The in-flight flow's authorization URL is stashed here so a sign-in that
 // completes after an app-switch to Pubky Ring (which backgrounds or reloads this
@@ -58,7 +73,11 @@ async function sessionToUser(s) {
 // show, and a promise that resolves to the user once approved in Pubky Ring
 // (this resolves in-page — desktop QR scan, or mobile if the tab stays alive).
 export function startLogin() {
-  const flow = client().startAuthFlow(CAPS, AuthFlowKind.signin());
+  // SDK 0.10 renamed startAuthFlow → startCookieAuthFlow. (There is also a newer
+  // grant-backed flow with self-refreshing sessions, which would remove the
+  // "sign in again when the cookie lapses" friction — a deliberate follow-up, not
+  // folded into this upgrade.)
+  const flow = client().startCookieAuthFlow(CAPS, AuthFlowKind.signin());
   const url = flow.authorizationUrl;
   savePending(url);
   const qr = qrcode(0, "M");
@@ -77,7 +96,7 @@ export async function resume() {
   try { url = sessionStorage.getItem(PENDING_KEY); } catch {}
   if (!url) return null;
   try {
-    const flow = client().resumeAuthFlow(url);
+    const flow = client().resumeCookieAuthFlow(url);
     return await flow.awaitApproval().then(sessionToUser);
   } catch { cancelPending(); return null; }
 }
@@ -89,7 +108,8 @@ export async function restore() {
   const u = storedUser();
   if (!u) return null;
   if (u.export) {
-    try { session = await Session.restore(u.export); } catch {}
+    // 0.10 moved restore onto the facade (was the static `Session.restore`).
+    try { session = await client().restoreSession(u.export); } catch {}
   }
   return u;
 }
@@ -104,23 +124,41 @@ export async function logout() {
 // identity pointer), so the aggregator can tell that a highlight published to
 // both rails came from one person rather than two strangers. Only honoured when
 // the Nostr event names this Pubky id back — a one-sided claim proves nothing.
-export async function publish(hl, key, link) {
+// `priv` writes to the owner-only namespace instead of the public one. The
+// cross-rail pointer is deliberately OMITTED from private records: it names the
+// reader's Nostr key, and a private highlight should not carry a second identity
+// even in storage only the owner can read.
+export async function publish(hl, key, link, priv) {
   if (!session) throw new Error("not-signed-in");
+  if (priv && !canPrivate()) throw new Error("this Pubky session predates private storage — sign in again to enable it");
   const rec = {
     id: hl.id,
     url: hl.url,
     anchor: hl.anchor,
     note: hl.note || "",
     createdAt: hl.createdAt || Date.now(),
-    ...(link && link.nostrPubkey ? { nostrPubkey: link.nostrPubkey } : {}),
+    ...(!priv && link && link.nostrPubkey ? { nostrPubkey: link.nostrPubkey } : {}),
   };
-  await session.storage.putJson(file(key, hl.id), rec);
+  await session.storage.putJson(file(key, hl.id, priv), rec);
   return hl.id;
 }
 
-export async function remove(id, key) {
+// Deletes from whichever namespace the highlight lives in. Unlike the public
+// case this must NOT swallow errors — a failed delete leaves the record up, and
+// the caller blocks the local delete so the reader can retry.
+export async function remove(id, key, priv) {
   if (!session) return;
-  try { await session.storage.delete(file(key, id)); } catch {}
+  await session.storage.delete(file(key, id, priv));
+}
+
+// Move a highlight between namespaces (public ⇄ private). Writes the new copy
+// BEFORE deleting the old one, so a failure midway leaves the highlight present
+// rather than destroyed.
+export async function setVisibility(hl, key, toPrivate) {
+  if (!session) throw new Error("not-signed-in");
+  await publish(hl, key, null, toPrivate);
+  try { await remove(hl.id, key, !toPrivate); } catch {}
+  return hl.id;
 }
 
 const toPath = (u) => (u.startsWith("pubky://") ? u.replace(/^pubky:\/\/[^/]+/, "") : (u.startsWith("/pub/") ? u : null));
@@ -155,43 +193,55 @@ export async function getProfile() {
   } catch { return null; }
 }
 
-// Everything under the wiki's highlights tree, across all pages. list() may
-// return files (recursive) or per-page dirs — handle both.
-export async function fetchAll() {
-  if (!session) return [];
-  const root = `/pub/${APP}/highlights/`;
+// list() gives `pubky://<user>/pub/…` URLs; storage calls want the bare path.
+const toStoragePath = (u) => u.replace(/^pubky:\/\/[^/]+/, "");
+
+// Read every .json record under a directory, tagged with the namespace it came
+// from. `pubky` = public on the homeserver, `pubkyp` = owner-only — mirroring
+// the nostr/nostrp pair so the rest of the app treats them uniformly.
+async function readDir(path, priv, withUrl) {
   let urls = [];
-  try { urls = await session.storage.list(root); } catch { return []; }
+  try { urls = await session.storage.list(path); } catch { return []; }
   const files = [];
   for (const u of urls) {
-    const path = u.replace(/^pubky:\/\/[^/]+/, "");
-    if (path.endsWith(".json")) files.push(path);
-    else { try { (await session.storage.list(path)).forEach((v) => { const q = v.replace(/^pubky:\/\/[^/]+/, ""); if (q.endsWith(".json")) files.push(q); }); } catch {} }
+    const p = toStoragePath(u);
+    if (p.endsWith(".json")) files.push(p);
+    else {
+      // A recursive list may return per-page directories instead of files.
+      try { (await session.storage.list(p)).forEach((v) => { const q = toStoragePath(v); if (q.endsWith(".json")) files.push(q); }); } catch {}
+    }
   }
   const out = [];
-  for (const path of files) {
+  for (const p of files) {
     try {
-      const rec = await session.storage.getJson(path);
-      const id = path.split("/").pop().replace(/\.json$/, "");
-      out.push({ id, source: "pubky", url: rec.url || "/", anchor: rec.anchor, note: rec.note || "", createdAt: rec.createdAt || 0, nostrPubkey: rec.nostrPubkey || null });
+      const rec = await session.storage.getJson(p);
+      out.push({
+        id: p.split("/").pop().replace(/\.json$/, ""),
+        source: priv ? "pubkyp" : "pubky",
+        ...(withUrl ? { url: rec.url || "/" } : {}),
+        anchor: rec.anchor,
+        note: rec.note || "",
+        createdAt: rec.createdAt || 0,
+        nostrPubkey: rec.nostrPubkey || null,
+      });
     } catch {}
   }
   return out;
 }
 
-// Fetch this page's highlights from the homeserver.
+// Everything under the wiki's highlights tree, across all pages and BOTH
+// namespaces.
+export async function fetchAll() {
+  if (!session) return [];
+  const pub = await readDir(`/pub/${APP}/highlights/`, false, true);
+  const priv = canPrivate() ? await readDir(`/priv/${APP}/highlights/`, true, true) : [];
+  return [...pub, ...priv];
+}
+
+// Fetch this page's highlights from the homeserver — public and private.
 export async function fetch(key) {
   if (!session) return [];
-  let urls = [];
-  try { urls = await session.storage.list(dir(key)); } catch { return []; }
-  const out = [];
-  for (const u of urls) {
-    const path = u.replace(/^pubky:\/\/[^/]+/, ""); // list gives pubky://<user>/pub/… → session path
-    try {
-      const rec = await session.storage.getJson(path);
-      const id = path.split("/").pop().replace(/\.json$/, "");
-      out.push({ id, source: "pubky", anchor: rec.anchor, note: rec.note || "", createdAt: rec.createdAt || 0, nostrPubkey: rec.nostrPubkey || null });
-    } catch {}
-  }
-  return out;
+  const pub = await readDir(dir(key, false), false, false);
+  const priv = canPrivate() ? await readDir(dir(key, true), true, false) : [];
+  return [...pub, ...priv];
 }

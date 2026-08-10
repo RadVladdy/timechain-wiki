@@ -168,6 +168,52 @@ export async function publishHighlight(hl, path) {
   return { ids, errors };
 }
 
+// Store a highlight PRIVATELY on every target rail.
+//
+// The two rails store private data by different mechanisms, so this is
+// deliberately asymmetric:
+//   • Pubky writes the record to the owner-only `/priv/` namespace immediately.
+//   • Nostr keeps ONE encrypted app-data blob per page, so there is nothing to
+//     write per highlight — this only checks the signer can encrypt, and the
+//     caller marks the highlight `nostrp` and re-saves the page blob.
+//
+// Returns { rails, errors } — `rails` are the ones that accepted it. A reader
+// whose signer can't encrypt and whose Pubky session predates private storage
+// gets an empty `rails`, and the caller must keep the highlight on-device rather
+// than silently publishing it.
+export async function privateHighlight(hl, path) {
+  const rails = [];
+  const errors = [];
+  for (const rail of targets()) {
+    try {
+      if (rail === "pubky") {
+        const p = await plib();
+        if (!p.canPrivate()) throw new Error("this Pubky session predates private storage — sign in again to enable it");
+        await p.publish(hl, p.pageKey(path), null, true);
+        rails.push("pubky");
+      } else {
+        const n = await nlib();
+        if (!n.canEncrypt()) throw new Error("your signer can't encrypt (NIP-44)");
+        rails.push("nostr");   // the caller writes the page blob
+      }
+    } catch (e) {
+      errors.push({ rail, message: e && e.message ? e.message : String(e) });
+    }
+  }
+  return { rails, errors };
+}
+
+// Can a private highlight be stored at all right now, on any target rail?
+export async function canStorePrivate() {
+  for (const rail of targets()) {
+    try {
+      if (rail === "pubky" && (await plib()).canPrivate()) return true;
+      if (rail === "nostr" && (await nlib()).canEncrypt()) return true;
+    } catch {}
+  }
+  return false;
+}
+
 // Is at least one target rail actually able to write right now? (A restored
 // session can be stale — the cookie or the signer may be gone.)
 export async function ready() {
@@ -202,7 +248,13 @@ export async function fetchPage(path) {
     try {
       const p = await plib();
       const got = await p.fetch(p.pageKey(path));
-      if (got) { incoming.push(...got); prune.push({ source: "pubky", ids: new Set(got.map((h) => h.id)) }); }
+      if (got) {
+        incoming.push(...got);
+        // Prune each namespace against its OWN results — a private highlight
+        // missing from the public list is not a ghost, it just lives elsewhere.
+        prune.push({ source: "pubky", ids: new Set(got.filter((h) => h.source === "pubky").map((h) => h.id)) });
+        if (p.canPrivate()) prune.push({ source: "pubkyp", ids: new Set(got.filter((h) => h.source === "pubkyp").map((h) => h.id)) });
+      }
     } catch {}
   }
 
@@ -225,7 +277,7 @@ export async function removeHighlight(hl, path) {
   const rail = railOf(hl);
   if (rail === "pubky") {
     const p = await plib();
-    await p.remove(hl.id, p.pageKey(path));   // throws on failure — deliberate
+    await p.remove(hl.id, p.pageKey(path), hl.source === "pubkyp");   // throws on failure — deliberate
   } else if (rail === "nostr" && hl.source === "nostr") {
     try { await (await nlib()).deleteEvent(hl.id); } catch {}
   }

@@ -6,8 +6,8 @@ import * as acct from "./accounts.js";
 
 const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
 
-const SRC_LABEL = { local: "On this device", nostrp: "Private · synced", nostr: "Public on Nostr", pubky: "Public on Pubky" };
-const SRC_CLS = { local: "loc", nostrp: "priv", nostr: "pub", pubky: "pub" };
+const SRC_LABEL = { local: "On this device", nostrp: "Private · synced", pubkyp: "Private · on Pubky", nostr: "Public on Nostr", pubky: "Public on Pubky" };
+const SRC_CLS = { local: "loc", nostrp: "priv", pubkyp: "priv", nostr: "pub", pubky: "pub" };
 
 function localAll() {
   const out = [];
@@ -139,9 +139,9 @@ export async function renderAllHighlights() {
             await (await acct.nlib()).deleteEvent(h.id);
           } else if (h.source === "nostrp" && acct.hasNostr()) {
             await (await acct.nlib()).privateSave(url, items.filter((x) => x.source === "nostrp"));
-          } else if (h.source === "pubky" && acct.hasPubky()) {
+          } else if ((h.source === "pubky" || h.source === "pubkyp") && acct.hasPubky()) {
             const p = await acct.plib();
-            await p.remove(h.id, p.pageKey(url));
+            await p.remove(h.id, p.pageKey(url), h.source === "pubkyp");
           }
         })();
         const slowHint = setTimeout(() => alertNote(box, "Still working — your Nostr signer may be asking for approval (check the extension icon)."), 2500);
