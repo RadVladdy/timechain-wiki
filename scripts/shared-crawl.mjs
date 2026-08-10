@@ -460,6 +460,16 @@ function bake(items) {
 }
 
 // ── run ───────────────────────────────────────────────────────────────────
+// --bake-only: re-render the baked output from the last-good corpus + the
+// CURRENT moderation queue, no network. Run after the overnight moderator so
+// same-night approvals ship with the 04:25 deploy instead of waiting a day.
+if (process.argv.includes("--bake-only")) {
+  const merged = mergeRails(state.lastGood.nostr, Object.fromEntries(Object.entries(state.lastGood.pubky)));
+  const { pages, total } = bake(merged);
+  writeJsonAtomic(queueFile, queue);
+  log(`bake-only: ${total} highlight(s) across ${pages} page(s) re-baked from last-good corpus`);
+  process.exit(0);
+}
 try {
   await discoverKeys();
   pruneRegistry();
