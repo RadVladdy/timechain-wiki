@@ -31,7 +31,7 @@ function syncMode() {
 function sugMode() { try { return localStorage.getItem(SUG_KEY) || "private"; } catch { return "private"; } }
 const setMode = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
 
-const TIP_TEXT = "Private on Nostr stores highlights + notes as encrypted app data on relays (NIP-78, kind 30078) — synced across your devices, readable only by you, never shown in anyone's feed; it needs a signer that supports encryption (most modern extensions + Amber do). Private on Pubky writes to the owner-only area of your homeserver, which nobody else can read whether they're signed in or not. Public on Nostr uses the highlight format (NIP-84, kind 9802; your note travels inside the same event), so apps like Amethyst or Highlighter show these on your profile; Public on Pubky writes to the world-readable area of your homeserver. Off keeps everything on this device. You can connect both accounts at once — Publish to then chooses where new highlights go, and writing to both links the two records so other readers see one person, not two. Suggestions always travel over Nostr, since Pubky has no way to receive a message: Private sends an encrypted direct message to the editors (NIP-17 gift wrap), Public sends a regular note that appears on your feed.";
+const TIP_TEXT = "Private on Nostr stores highlights + notes as encrypted app data on relays (NIP-78, kind 30078) — synced across your devices, readable only by you, never shown in anyone's feed; it needs a signer that supports encryption (most modern extensions + Amber do). Private on Pubky writes to the authenticated area of your homeserver: no other user can read it and it is never public, but whoever operates your homeserver can — unlike Nostr's private mode, it is access-controlled rather than encrypted. Pubky ships this as experimental and warns the API may change, so a copy of every highlight always stays on this device. Public on Nostr uses the highlight format (NIP-84, kind 9802; your note travels inside the same event), so apps like Amethyst or Highlighter show these on your profile; Public on Pubky writes to the world-readable area of your homeserver. Off keeps everything on this device. You can connect both accounts at once — Publish to then chooses where new highlights go, and writing to both links the two records so other readers see one person, not two. Suggestions always travel over Nostr, since Pubky has no way to receive a message: Private sends an encrypted direct message to the editors (NIP-17 gift wrap), Public sends a regular note that appears on your feed.";
 function infoTip() {
   const s = el("span", "tw-info");
   s.tabIndex = 0;
@@ -397,7 +397,7 @@ function renderPanel() {
     status.title = h.source === "nostrp"
       ? "Synced across your devices as encrypted data — only you can read it; never in feeds."
       : h.source === "pubkyp"
-        ? "Stored in the owner-only area of your homeserver — nobody else can read it, signed in or not."
+        ? "Stored in the private area of your homeserver — no other user can read it, and it is not public. Whoever operates your homeserver still can. Pubky calls this feature experimental; a copy stays on this device."
         : statusCls === "pub"
           ? "Published to your own account — publicly visible. Saves automatically."
           : "Saved only in this browser — private. Saves automatically.";
@@ -895,7 +895,7 @@ function renderAuth() {
     box.appendChild(settingsBlock(false));
     if (acct.hasPubky()) {
       box.appendChild(el("div", "tw-pk-note", pubkyPrivateReady
-        ? "Pubky highlights live on your own homeserver — Public in its world-readable area, Private in the owner-only one. Suggestions travel over Nostr."
+        ? "Pubky highlights live on your own homeserver — Public in its world-readable area, Private in its authenticated one (which your homeserver's operator can still read). Pubky ships private storage as experimental and may change it, so a copy always stays on this device. Suggestions travel over Nostr."
         : "Your Pubky sign-in predates private storage, so Pubky highlights are public. Sign out and in again to enable Private. Suggestions travel over Nostr."));
     }
     // Offer to connect the rail they don't have yet — this is the only place the

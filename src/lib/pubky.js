@@ -199,9 +199,15 @@ const toStoragePath = (u) => u.replace(/^pubky:\/\/[^/]+/, "");
 // Read every .json record under a directory, tagged with the namespace it came
 // from. `pubky` = public on the homeserver, `pubkyp` = owner-only — mirroring
 // the nostr/nostrp pair so the rest of the app treats them uniformly.
+// Returns NULL when the listing could not be obtained — deliberately distinct
+// from an empty array. The caller prunes local copies of records the server no
+// longer returns, so "the request failed" must never be mistaken for "you have
+// none": that would delete the reader's own highlights off their device. This
+// matters most for /priv/, which upstream ships as ALPHA and warns may "change
+// or disappear" — the exact scenario where list() starts failing.
 async function readDir(path, priv, withUrl) {
   let urls = [];
-  try { urls = await session.storage.list(path); } catch { return []; }
+  try { urls = await session.storage.list(path); } catch { return null; }
   const files = [];
   for (const u of urls) {
     const p = toStoragePath(u);
@@ -235,13 +241,18 @@ export async function fetchAll() {
   if (!session) return [];
   const pub = await readDir(`/pub/${APP}/highlights/`, false, true);
   const priv = canPrivate() ? await readDir(`/priv/${APP}/highlights/`, true, true) : [];
-  return [...pub, ...priv];
+  return [...(pub || []), ...(priv || [])];
 }
 
 // Fetch this page's highlights from the homeserver — public and private.
+// `answered` reports which namespaces actually responded; only those may be
+// used to prune local copies (see readDir).
 export async function fetch(key) {
-  if (!session) return [];
+  if (!session) return { items: [], answered: {} };
   const pub = await readDir(dir(key, false), false, false);
-  const priv = canPrivate() ? await readDir(dir(key, true), true, false) : [];
-  return [...pub, ...priv];
+  const priv = canPrivate() ? await readDir(dir(key, true), true, false) : null;
+  return {
+    items: [...(pub || []), ...(priv || [])],
+    answered: { pubky: pub !== null, pubkyp: priv !== null },
+  };
 }

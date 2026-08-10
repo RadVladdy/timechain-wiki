@@ -247,14 +247,15 @@ export async function fetchPage(path) {
   if (hasPubky()) {
     try {
       const p = await plib();
-      const got = await p.fetch(p.pageKey(path));
-      if (got) {
-        incoming.push(...got);
-        // Prune each namespace against its OWN results — a private highlight
-        // missing from the public list is not a ghost, it just lives elsewhere.
-        prune.push({ source: "pubky", ids: new Set(got.filter((h) => h.source === "pubky").map((h) => h.id)) });
-        if (p.canPrivate()) prune.push({ source: "pubkyp", ids: new Set(got.filter((h) => h.source === "pubkyp").map((h) => h.id)) });
-      }
+      const { items, answered } = await p.fetch(p.pageKey(path));
+      incoming.push(...items);
+      // Prune each namespace against its OWN results, and ONLY when that
+      // namespace actually answered. A failed listing must never be read as
+      // "you have none" — that would delete the reader's highlights locally.
+      // Also note a private record missing from the public list is not a ghost;
+      // it just lives in the other namespace.
+      if (answered.pubky) prune.push({ source: "pubky", ids: new Set(items.filter((h) => h.source === "pubky").map((h) => h.id)) });
+      if (answered.pubkyp) prune.push({ source: "pubkyp", ids: new Set(items.filter((h) => h.source === "pubkyp").map((h) => h.id)) });
     } catch {}
   }
 
