@@ -6,6 +6,7 @@
 import { describe, resolve, hitTest } from "./anchor.js";
 import * as store from "./store.js";
 import * as acct from "./accounts.js";
+import * as shared from "./shared.js";
 
 let root = null;
 let list = [];
@@ -31,7 +32,7 @@ function syncMode() {
 function sugMode() { try { return localStorage.getItem(SUG_KEY) || "private"; } catch { return "private"; } }
 const setMode = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
 
-const TIP_TEXT = "Private on Nostr stores highlights + notes as encrypted app data on relays (NIP-78, kind 30078) — synced across your devices, readable only by you, never shown in anyone's feed; it needs a signer that supports encryption (most modern extensions + Amber do). Private on Pubky writes to the authenticated area of your homeserver: no other user can read it and it is never public, but whoever operates your homeserver can — unlike Nostr's private mode, it is access-controlled rather than encrypted. Pubky ships this as experimental and warns the API may change, so a copy of every highlight always stays on this device. Public on Nostr uses the highlight format (NIP-84, kind 9802; your note travels inside the same event), so apps like Amethyst or Highlighter show these on your profile; Public on Pubky writes to the world-readable area of your homeserver. Off keeps everything on this device. You can connect both accounts at once — Publish to then chooses where new highlights go, and writing to both links the two records so other readers see one person, not two. Suggestions always travel over Nostr, since Pubky has no way to receive a message: Private sends an encrypted direct message to the editors (NIP-17 gift wrap), Public sends a regular note that appears on your feed.";
+const TIP_TEXT = "Private on Nostr stores highlights + notes as encrypted app data on relays (NIP-78, kind 30078) — synced across your devices, readable only by you, never shown in anyone's feed; it needs a signer that supports encryption (most modern extensions + Amber do). Private on Pubky writes to the authenticated area of your homeserver: no other user can read it and it is never public, but whoever operates your homeserver can — unlike Nostr's private mode, it is access-controlled rather than encrypted. Pubky ships this as experimental and warns the API may change, so a copy of every highlight always stays on this device. Public on Nostr uses the highlight format (NIP-84, kind 9802; your note travels inside the same event), so apps like Amethyst or Highlighter show these on your profile; Public on Pubky writes to the world-readable area of your homeserver. Public highlights can also appear in this site's shared layer for other readers — Nostr ones arrive there automatically (public relays are public), Pubky ones only if you turn Shared layer on. Off keeps everything on this device. You can connect both accounts at once — Publish to then chooses where new highlights go, and writing to both links the two records so other readers see one person, not two. Suggestions always travel over Nostr, since Pubky has no way to receive a message: Private sends an encrypted direct message to the editors (NIP-17 gift wrap), Public sends a regular note that appears on your feed.";
 function infoTip() {
   const s = el("span", "tw-info");
   s.tabIndex = 0;
@@ -89,6 +90,7 @@ function segRow(label, key, options, withTip, read, write) {
       document.querySelectorAll(`.tw-seg-row[data-key="${key}"] .tw-seg-b`).forEach((x) => x.classList.toggle("on", x.dataset.v === o.v));
       if (key === MODE_KEY) toast(MODE_TOASTS[o.v]);
       else if (key === PUB_KEY) toast(PUBLISH_TOASTS[o.v]);
+      else if (key === SHARED_VIEW_KEY) toast(o.v === "on" ? "Shared layer on — other readers' public highlights show on the pages." : "Shared layer off — you'll see only your own highlights.");
       else toast(o.v === "private" ? "Suggestions send as encrypted DMs — nothing on your feed." : "Suggestions send as public notes on your feed.");
     });
     seg.appendChild(b);
@@ -98,11 +100,17 @@ function segRow(label, key, options, withTip, read, write) {
   return row;
 }
 const PUB_KEY = "tw:publishto";
+const SHARED_VIEW_KEY = "tw:sharedview";
 function settingsBlock(compact) {
   const box = el("div", "tw-settings");
   box.appendChild(segRow("Highlights", MODE_KEY, [
     { v: "private", label: "Private" }, { v: "public", label: "Public" }, { v: "off", label: "Off" },
   ], true, syncMode, (v) => setMode(MODE_KEY, v)));
+  // The shared LAYER (other readers' public highlights) — kept reachable here
+  // so a reader who turned it off in the shared panel can find their way back.
+  box.appendChild(segRow("Readers' highlights", SHARED_VIEW_KEY, [
+    { v: "on", label: "On" }, { v: "off", label: "Off" },
+  ], false, () => (shared.isOn() ? "on" : "off"), (v) => shared.setOn(v === "on")));
   // Only meaningful with two identities connected — with one there is nowhere else
   // for a highlight to go, and the row would be a control that does nothing.
   if (acct.hasBoth()) {
@@ -132,6 +140,68 @@ async function refreshPubkyCaps() {
   if (!acct.hasPubky()) { pubkyPrivateReady = false; return; }
   try { pubkyPrivateReady = (await plib()).canPrivate(); } catch { pubkyPrivateReady = false; }
 }
+// Shared-layer opt-in for the Pubky rail. The truth is the marker on the
+// reader's OWN homeserver (pubky.js setShared); localStorage only caches the
+// last known answer so the row renders instantly. Refreshed once per sign-in,
+// not per render — renderAuth runs on every panel action.
+let pkShare = null;        // null = unknown
+let pkShareFresh = false;  // homeserver asked this session?
+// Cache key carries the Pubky id — a different identity signing in on this
+// device must not inherit the previous one's answer.
+function pkShareKey() { const u = acct.pubky(); return u ? "tw:pkshare:" + String(u.pubky).replace(/^pubky:?/, "") : null; }
+function pkShareCached() { try { const k = pkShareKey(); const v = k && localStorage.getItem(k); return v == null ? null : v === "1"; } catch { return null; } }
+function cachePkShare(v) { pkShare = v; try { const k = pkShareKey(); if (k) localStorage.setItem(k, v ? "1" : "0"); } catch {} }
+async function refreshPkShare() {
+  if (!acct.hasPubky() || pkShareFresh) return;
+  pkShareFresh = true;
+  try {
+    const v = await (await plib()).getShared();
+    if (v !== null && v !== pkShare) { cachePkShare(v); renderPanel(); }
+  } catch {}
+}
+
+function shareRow() {
+  const row = el("div", "tw-seg-row");
+  row.dataset.key = "pkshare";
+  row.appendChild(el("span", "tw-toggle-t", "Shared layer"));
+  const seg = el("div", "tw-seg");
+  const cur = pkShare === null ? pkShareCached() : pkShare;
+  let busy = false;
+  for (const o of [{ v: true, label: "In" }, { v: false, label: "Out" }]) {
+    const b = el("button", "tw-seg-b" + (o.v === cur ? " on" : ""), o.label);
+    b.type = "button";
+    b.addEventListener("click", async () => {
+      if (busy || o.v === (pkShare === null ? pkShareCached() : pkShare)) return;
+      busy = true;
+      try {
+        const p = await plib();
+        if (o.v) {
+          // Marker first, then the relay hint that lets the crawler find the
+          // key. If the hint can't land anywhere the opt-in would be a silent
+          // no-op — roll the marker back and say so, rather than leaving the
+          // reader believing they're in.
+          await p.setShared(true);
+          try { await (await nlib()).publishPubkyShareHint(p.userId()); }
+          catch (e) { await p.setShared(false).catch(() => {}); throw e; }
+        } else {
+          await p.setShared(false);
+        }
+        cachePkShare(o.v);
+        seg.querySelectorAll(".tw-seg-b").forEach((x, i) => x.classList.toggle("on", (i === 0) === o.v));
+        toast(o.v
+          ? "You're in — your public Pubky highlights join the shared layer on the next nightly sweep."
+          : "You're out — your public Pubky highlights drop from the shared layer on the next nightly sweep.");
+      } catch (e) {
+        toast("Couldn't change sharing: " + (e.message || e), true);
+      }
+      busy = false;
+    });
+    seg.appendChild(b);
+  }
+  row.appendChild(seg);
+  return row;
+}
+
 // The label shown on the chip: the identity new highlights are actually going
 // to, so the face matches the destination.
 function userLabel() {
@@ -159,6 +229,7 @@ function paint() {
   CSS.highlights.set("tw-hl", new Highlight(...base));
   CSS.highlights.set("tw-hl-on", new Highlight(...active));
   updateFab();
+  shared.refresh();   // the shared layer hides duplicates of the reader's own
 }
 
 let activeId = null;
@@ -300,7 +371,7 @@ fab.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><pa
 document.body.appendChild(fab);
 
 let lastClose = 0;
-function openPanel() { panel.hidden = false; renderPanel(); }
+function openPanel() { shared.close(); panel.hidden = false; renderPanel(); }
 function closePanel() { panel.hidden = true; activeId = null; lastClose = Date.now(); paint(); }
 function updateFab() {
   const n = list.length;
@@ -782,6 +853,7 @@ async function cancelPubky() { hidePubkyDialog(); try { (await plib()).cancelPen
 async function onSignedIn(u) {
   if (!u || acct.hasPubky()) return;
   acct.set("pubky", u);
+  pkShare = null; pkShareFresh = false;   // fresh identity — re-ask its homeserver
   await refreshPubkyCaps();
   hidePubkyDialog();
   renderChip();
@@ -867,6 +939,7 @@ async function doLogin(method) {
 // Sign out of ONE rail, leaving the other connected.
 async function doLogout(rail) {
   await acct.logout(rail);
+  if (rail === "pubky") { pkShare = null; pkShareFresh = false; }
   await refreshPubkyCaps();
   renderChip(); renderAuth();
   toast(signedIn()
@@ -875,6 +948,7 @@ async function doLogout(rail) {
 }
 async function doLogoutAll() {
   await acct.logoutAll();
+  pkShare = null; pkShareFresh = false;
   await refreshPubkyCaps();
   renderChip(); renderAuth();
   toast("Signed out. Highlights stay saved on this device.");
@@ -897,6 +971,9 @@ function renderAuth() {
       box.appendChild(el("div", "tw-pk-note", pubkyPrivateReady
         ? "Pubky highlights live on your own homeserver — Public in its world-readable area, Private in its authenticated one (which your homeserver's operator can still read). Pubky ships private storage as experimental and may change it, so a copy always stays on this device. Suggestions travel over Nostr."
         : "Your Pubky sign-in predates private storage, so Pubky highlights are public. Sign out and in again to enable Private. Suggestions travel over Nostr."));
+      box.appendChild(shareRow());
+      box.appendChild(el("div", "tw-pk-note", "Shared layer: other readers can see public highlights on these pages. Your public Pubky highlights are included only while you're In — the site can't find them otherwise, and going Out drops them on the next nightly sweep. (Public Nostr highlights live on open relays, so those appear in the shared layer without an opt-in — that's what public means on Nostr.)"));
+      refreshPkShare();
     }
     // Offer to connect the rail they don't have yet — this is the only place the
     // second identity is discoverable once you're already signed in.
@@ -1058,6 +1135,14 @@ export async function init() {
   });
 
   window.addEventListener("resize", debounce(() => { paint(); positionFab(); }, 150));
+
+  // Other readers' public highlights — the pre-baked shared layer. The reader's
+  // own layer wins a contested click, and opening one panel closes the other.
+  shared.init(root, {
+    ownHit: (x, y) => hitTest(root, list, x, y),
+    ownIds: () => new Set(list.map((h) => h.id)),
+    closeOwn: closePanel,
+  }).catch(() => {});
 
   // Deep link from /highlights: #twhl=<id> → activate + scroll. The highlight
   // may only exist remotely (private blob / relay), and decryption through a

@@ -161,6 +161,33 @@ export async function setVisibility(hl, key, toPrivate) {
   return hl.id;
 }
 
+// ── shared-layer opt-in ───────────────────────────────────────────────────
+// The site's shared-highlights layer is built by a nightly crawl, and Pubky has
+// no firehose — the crawler can only read users it KNOWS about. Opting in
+// writes a marker to the reader's OWN homeserver: only the key holder can write
+// there, so the marker is unforgeable, and the crawler includes a key only when
+// the marker is present. (A relay hint tells the crawler the key exists at all —
+// see nostr.js publishPubkyShareHint — but the marker is the authority; deleting
+// it opts back out no matter who hints what.)
+const SHARE_FILE = `/pub/${APP}/share.json`;
+
+export async function getShared() {
+  if (!session) return null; // unknown
+  try { const m = await session.storage.getJson(SHARE_FILE); return !!(m && m.share); }
+  catch (e) { return /404/.test(String(e?.message || e)) ? false : null; }
+}
+
+export async function setShared(on) {
+  if (!session) throw new Error("not-signed-in");
+  if (on) await session.storage.putJson(SHARE_FILE, { v: 1, share: true, since: Date.now() });
+  else await session.storage.delete(SHARE_FILE);
+  return on;
+}
+
+export function userId() {
+  return session ? session.info.publicKey.toString().replace(/^pubky:?/, "") : null;
+}
+
 const toPath = (u) => (u.startsWith("pubky://") ? u.replace(/^pubky:\/\/[^/]+/, "") : (u.startsWith("/pub/") ? u : null));
 
 // Resolve a pubky.app profile `image` value to a displayable URL. In pubky.app an

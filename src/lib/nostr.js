@@ -352,6 +352,28 @@ export async function publishSuggestionPrivate({ exact, text, path }) {
   return wrap.id;
 }
 
+// Tell the shared-highlights crawler a Pubky key exists. Pubky has no firehose,
+// so the nightly crawl can only read keys it has been TOLD about; this publishes
+// a small addressable app-data event (kind 30078 — never rendered in feeds)
+// carrying the reader's Pubky id, signed by a throwaway key so it works for
+// readers with no Nostr identity and costs no signer prompt. It is only a hint:
+// the crawler includes a key solely when the share marker on that key's OWN
+// homeserver says so (see pubky.js), so a false hint about someone else's key
+// changes nothing.
+export const SHARE_HINT_D = "timechain.wiki:pubky-share";
+export async function publishPubkyShareHint(pubkyId) {
+  const { finalizeEvent } = await import("nostr-tools/pure");
+  const ev = finalizeEvent({
+    kind: 30078,
+    created_at: Math.floor(Date.now() / 1000),
+    content: pubkyId,
+    tags: [["d", SHARE_HINT_D], ["tw-pubky", pubkyId], ["alt", "Timechain Wiki shared-highlights opt-in"]],
+  }, generateSecretKey());
+  const acks = await Promise.allSettled(pool.publish(RELAYS, ev));
+  if (!acks.some((a) => a.status === "fulfilled")) throw new Error("no relay accepted the opt-in hint");
+  return ev.id;
+}
+
 // Request deletion of a highlight event (NIP-09 kind-5). Best-effort — relays
 // may or may not honor it; the highlight is removed locally regardless.
 export async function deleteEvent(id) {
