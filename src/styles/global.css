@@ -102,7 +102,10 @@ a{color:inherit}
 .searchbar .kbd{margin-left:auto;font-family:var(--mono);font-size:11px;border:1px solid var(--line);border-radius:6px;padding:3px 7px}
 
 /* ── /learn explainer pages ─────────────────────────────────── */
-.learn{padding:clamp(40px,7vw,80px) 0 90px}
+/* longhands on purpose: the shorthand's horizontal 0 was overriding .wrap's
+   clamp() side padding (same specificity, later rule), running every learn
+   page's text flush to the screen edge on mobile */
+.learn{padding-top:clamp(40px,7vw,80px);padding-bottom:90px}
 .learn .lead{max-width:720px}
 .learn .kicker{display:flex;align-items:center;gap:14px;margin-bottom:22px}
 .learn h1{font-family:var(--serif);font-weight:600;font-size:clamp(30px,5vw,50px);line-height:1.06;letter-spacing:-.015em;margin-bottom:18px}
