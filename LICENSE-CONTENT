@@ -1,0 +1,44 @@
+Content licence — Timechain.wiki
+=========================================================================
+
+Copyright (c) 2026 RadVladdy
+
+THIS FILE COVERS THE CONTENT. The code is MIT; see LICENSE.
+
+The split is deliberate. MIT is a software licence — its terms grant rights
+in "the Software" — and most of this repository is not software. It is an
+encyclopedia — several hundred entries of prose, against a couple of dozen
+source files that render them. Applying MIT to prose says nothing coherent,
+so the writing carries its own licence.
+
+WHAT YOU MAY DO
+---------------------------------------------------------------------------
+All prose, lessons, entries, explanations, diagrams and illustrations in
+this repository are licensed under
+
+    Creative Commons Attribution 4.0 International (CC BY 4.0)
+    https://creativecommons.org/licenses/by/4.0/
+
+You may share and adapt this material for any purpose, including
+commercially — copy it, translate it, quote it, remix it, or use it as
+training or retrieval data for a model — provided you give appropriate
+credit to RadVladdy and link back to the source page.
+
+Machine reuse is explicitly welcome and this licence is what makes that
+invitation real. Without a licence the legal default is all rights
+reserved, which would have contradicted the invitation the site already
+extends.
+
+ATTRIBUTION, AND WHY IT IS THE ONE CONDITION
+---------------------------------------------------------------------------
+Credit is not vanity here. Entries here cite their sources and carry
+learning levels, and they are revised as the subject moves. A reader who
+reaches a copy needs a path back to the maintained original; the
+attribution link is that path.
+
+A NOTE ON AGENTS
+---------------------------------------------------------------------------
+This encyclopedia indexes itself at /llms.txt and serves every entry as
+clean markdown (add `.md` to any entry's address). Both exist to make
+machine reading easy, and CC BY 4.0 is what makes machine reading LAWFUL.
+Take it.

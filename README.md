@@ -86,3 +86,12 @@ coming-soon placeholder that used to live on `main` was retired at the
 [`archive/coming-soon-2026-07`](https://github.com/RadVladdy/timechain-wiki/releases/tag/archive%2Fcoming-soon-2026-07).
 The former `astro-build` branch was renamed to `main` and no longer exists —
 GitHub redirects old links to it.
+
+## Licence
+
+**Code: [MIT](LICENSE). Content: [CC BY 4.0](LICENSE-CONTENT).**
+
+Every entry is yours to copy, translate, remix or use as training and
+retrieval data — credit RadVladdy and link back. This encyclopedia already
+indexes itself at `/llms.txt` and serves every entry as clean markdown; the
+licence is what makes that invitation lawful rather than merely friendly.
