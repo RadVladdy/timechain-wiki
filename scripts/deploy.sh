@@ -44,6 +44,29 @@ npx wrangler pages deploy dist --project-name=timechain-wiki --commit-dirty=true
 
 echo "── deployed. Verify on the live domain before calling it done."
 
+# ── Drop the edge cache, then PROVE the edge matches origin ───────────────────
+# A green wrangler log plus a stale edge is indistinguishable from a fix that
+# does not work. radvladdy.com hit this twice (2026-08-15, 2026-08-20), and both
+# times the live pages served the OLD HTML under `cf-cache-status: HIT` while
+# the origin was already correct. The lesson was written down the first time and
+# changed nothing, because it was recorded as knowledge and never wired as
+# behaviour. This is the wiring, and it is the same line in all four repos.
+#
+# 🌙 IT MATTERS MOST HERE, because this is the one site that ships WITHOUT A
+# PERSON: the 04:25 nightly rebuilds 394 articles from the KB and nobody looks at
+# the result. A stale edge on the manual path gets noticed eventually; on the
+# nightly path it would simply serve yesterday's wiki, silently, forever.
+#
+# ⚠️ IT RUNS BEFORE INDEXNOW ON PURPOSE. Telling six search engines to come and
+# index right now, while the edge still hands out the previous version, is worse
+# than not telling them — it banks the stale page.
+#
+# A failure here must NOT fail the deploy (the site is already live), but it must
+# not be silent either. `cf-purge verify` is the half that can go red: it compares
+# a cache-busted fetch against an ordinary one, because a plain check can be
+# answered by the very cache it is meant to catch.
+"$HOME/bin/cf-purge" deploy timechain.wiki || echo "── ⚠️ CACHE PURGE/VERIFY FAILED — the deploy itself was fine. Do not call it live until: cf-purge deploy timechain.wiki"
+
 # ── Tell the non-Google engines, immediately ──────────────────────────────────
 # IndexNow reaches Bing, Yandex, Naver, Seznam.cz, Yep and DuckDuckGo in one
 # call. NOT Google, which declined to adopt it — Google discovers this deploy on
