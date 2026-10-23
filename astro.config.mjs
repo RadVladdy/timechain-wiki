@@ -1,5 +1,6 @@
 import { defineConfig } from "astro/config";
 import sitemap from "@astrojs/sitemap";
+import { unified } from "@astrojs/markdown-remark";
 import remarkWikiLink from "remark-wiki-link";
 import { readFileSync } from "node:fs";
 import { buildLastmod } from "./scripts/lastmod.mjs";
@@ -24,20 +25,25 @@ export default defineConfig({
   // re-synced nightly, so anything derived from it would claim all 394 articles
   // changed today, every day. See scripts/lastmod.mjs. No lastmod until 2026-08-07.
   integrations: [sitemap({ serialize: buildLastmod() })],
+  // Astro 7 defaults: Sätteri markdown + 'jsx' whitespace — both pinned back to
+  // the v5 behaviour so the 2026-10 security upgrade changes no rendered output.
+  compressHTML: true,
   markdown: {
-    remarkPlugins: [
-      [
-        remarkWikiLink,
-        {
-          pathFormat: "raw",
-          aliasDivider: "|",
-          permalinks,
-          pageResolver: (name) => [slugify(name)],
-          hrefTemplate: (permalink) => `/wiki/${permalink}`,
-          wikiLinkClassName: "wl",
-          newClassName: "wl-new",
-        },
+    processor: unified({
+      remarkPlugins: [
+        [
+          remarkWikiLink,
+          {
+            pathFormat: "raw",
+            aliasDivider: "|",
+            permalinks,
+            pageResolver: (name) => [slugify(name)],
+            hrefTemplate: (permalink) => `/wiki/${permalink}`,
+            wikiLinkClassName: "wl",
+            newClassName: "wl-new",
+          },
+        ],
       ],
-    ],
+    }),
   },
 });
